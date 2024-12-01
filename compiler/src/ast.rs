@@ -1,13 +1,23 @@
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
+pub enum LogLevel {
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
-    Int,
-    Float,
-    String,
-    Bool,
-    List(Box<Type>),
-    Map(Box<Type>, Box<Type>),
-    Function(Vec<Type>, Box<Type>),
+    Int = 0,
+    Float = 1,
+    String = 2,
+    Bool = 3,
+    List(Box<Type>) = 4,
+    Map(Box<Type>, Box<Type>) = 5,
+    Function(Vec<Type>, Box<Type>) = 6,
+    LogLevel = 7,
 }
 
 #[allow(dead_code)]
@@ -40,18 +50,22 @@ pub enum Expression {
         left: Box<Expression>,
         operator: Operator,
         right: Box<Expression>,
+    },
+    LogCall {
+        level: LogLevel,
+        message: Box<Expression>,
     }
 }
 
 #[derive(Debug)]
 pub enum Operator {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Power,
-    Equals,
-    NotEquals,
-    LessThan,
-    GreaterThan,
+    Add = 1,
+    Subtract = 2,
+    Multiply = 3,
+    Divide = 4,
+    Power = 5,
+    Equals = 6,
+    NotEquals = 7,
+    LessThan = 8,
+    GreaterThan = 9,
 }

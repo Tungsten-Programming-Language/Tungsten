@@ -1,4 +1,4 @@
-use crate::ast::{Expression, Operator};
+use crate::ast::{Expression, Operator, LogLevel};
 
 pub struct CodeGenerator {
     assembly: String,
@@ -89,6 +89,16 @@ impl CodeGenerator {
                     Operator::NotEquals => self.assembly.push_str("    ; Not equals comparison not implemented\n"),
                     Operator::LessThan => self.assembly.push_str("    ; Less than comparison not implemented\n"),
                     Operator::GreaterThan => self.assembly.push_str("    ; Greater than comparison not implemented\n"),
+                }
+            }
+            Expression::LogCall { level, message } => {
+                // Placeholder for log function code generation
+                self.generate_expression(message);
+                match level {
+                    LogLevel::Debug => self.assembly.push_str("    ; LogDebug not implemented\n"),
+                    LogLevel::Info => self.assembly.push_str("    ; LogInfo not implemented\n"),
+                    LogLevel::Warn => self.assembly.push_str("    ; LogWarn not implemented\n"),
+                    LogLevel::Error => self.assembly.push_str("    ; LogError not implemented\n"),
                 }
             }
         }

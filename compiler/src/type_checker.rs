@@ -41,6 +41,11 @@ impl TypeChecker {
                 self.check(body),
             Expression::BinaryOp { left, operator, right } => 
                 self.check_binary_operation(left, *operator, right),
+            Expression::LogCall { level: _, message } => {
+                // Log function always returns void/unit type
+                self.check(message)?;
+                Ok(Type::Int) // Placeholder, could be a specific "Void" type
+            }
         }
     }
 

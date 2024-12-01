@@ -22,6 +22,10 @@ pub enum Token {
     NotEquals,
     LessThan,
     GreaterThan,
+    LogDebug,
+    LogInfo,
+    LogWarn,
+    LogError,
 }
 
 pub struct Lexer {
@@ -89,8 +93,18 @@ impl Lexer {
                 self.position += 1;
                 Some(Token::Power)
             }
+            '"' => {
+                Some(Token::String(self.read_string()))
+            }
             c if c.is_alphabetic() => {
-                Some(Token::Identifier(self.read_identifier()))
+                let identifier = self.read_identifier();
+                match identifier.as_str() {
+                    "LogDebug" => Some(Token::LogDebug),
+                    "LogInfo" => Some(Token::LogInfo),
+                    "LogWarn" => Some(Token::LogWarn),
+                    "LogError" => Some(Token::LogError),
+                    _ => Some(Token::Identifier(identifier))
+                }
             }
             c if c.is_digit(10) => {
                 Some(Token::Number(self.read_number()))
@@ -126,5 +140,21 @@ impl Lexer {
             self.position += 1;
         }
         number.parse().unwrap_or(0)
+    }
+
+    fn read_string(&mut self) -> String {
+        // Consume opening quote
+        self.position += 1;
+        let mut string = String::new();
+        while self.position < self.input.len() && 
+              self.input[self.position] != '"' {
+            string.push(self.input[self.position]);
+            self.position += 1;
+        }
+        // Consume closing quote
+        if self.position < self.input.len() {
+            self.position += 1;
+        }
+        string
     }
 }

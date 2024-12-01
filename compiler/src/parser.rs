@@ -1,4 +1,4 @@
-use crate::ast::{Expression, Operator, Type, TypeAnnotation};
+use crate::ast::{Expression, Operator, Type, TypeAnnotation, LogLevel};
 use crate::lexer::{Lexer, Token};
 
 pub struct Parser {
@@ -19,7 +19,15 @@ impl Parser {
     /// Parses the entire input and returns the resulting expression
     /// This method is used by tests and may appear unused in some contexts
     pub fn parse(&mut self) -> Option<Expression> {
-        self.parse_expression()
+        // This method is used by tests to parse the entire input
+        let result = self.parse_expression();
+        
+        // Ensure all tokens are consumed
+        if self.current_token.is_some() {
+            None
+        } else {
+            result
+        }
     }
 
     pub fn parse_expression(&mut self) -> Option<Expression> {
@@ -189,6 +197,11 @@ impl Parser {
                 self.advance();
                 Some(expr)
             }
+            Some(Token::String(s)) => {
+                let expr = Expression::String(s.clone());
+                self.advance();
+                Some(expr)
+            }
             Some(Token::Identifier(id)) => {
                 let expr = Expression::Identifier(id.clone());
                 self.advance();
@@ -196,8 +209,49 @@ impl Parser {
             }
             Some(Token::LeftBracket) => self.parse_list(),
             Some(Token::LeftBrace) => self.parse_map(),
+            Some(Token::LogDebug) => {
+                self.advance();
+                self.parse_log_call(LogLevel::Debug)
+            }
+            Some(Token::LogInfo) => {
+                self.advance();
+                self.parse_log_call(LogLevel::Info)
+            }
+            Some(Token::LogWarn) => {
+                self.advance();
+                self.parse_log_call(LogLevel::Warn)
+            }
+            Some(Token::LogError) => {
+                self.advance();
+                self.parse_log_call(LogLevel::Error)
+            }
             _ => None,
         }
+    }
+
+    fn parse_log_call(&mut self, level: LogLevel) -> Option<Expression> {
+        // Expect left bracket
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Parse log message
+        let message = match self.parse_expression() {
+            Some(expr) => Box::new(expr),
+            None => return None,
+        };
+
+        // Expect right bracket
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::LogCall {
+            level,
+            message,
+        })
     }
 
     fn parse_map(&mut self) -> Option<Expression> {
