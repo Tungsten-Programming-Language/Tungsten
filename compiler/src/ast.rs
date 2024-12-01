@@ -9,6 +9,7 @@ pub enum LogLevel {
 
 #[repr(u8)]
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum Type {
     Int = 0,
     Float = 1,
@@ -58,6 +59,7 @@ pub enum Expression {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum Operator {
     Add = 1,
     Subtract = 2,

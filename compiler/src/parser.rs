@@ -17,9 +17,8 @@ impl Parser {
     }
 
     /// Parses the entire input and returns the resulting expression
-    /// This method is used by tests and may appear unused in some contexts
     pub fn parse(&mut self) -> Option<Expression> {
-        // This method is used by tests to parse the entire input
+        // Parse the entire input
         let result = self.parse_expression();
         
         // Ensure all tokens are consumed

@@ -1,7 +1,6 @@
-#[cfg(test)]
 mod tests {
-    use crate::ast::{Expression, LogLevel};
-    use crate::parser::Parser;
+    use compiler::ast::{Expression, LogLevel};
+    use compiler::parser::Parser;
 
     #[test]
     fn test_log_debug_parsing() {
