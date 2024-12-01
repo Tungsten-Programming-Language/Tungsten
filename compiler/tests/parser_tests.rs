@@ -1,6 +1,6 @@
 mod tests {
-    use compiler::ast::{Expression, LogLevel};
-    use compiler::parser::Parser;
+    use w::ast::{Expression, LogLevel};
+    use w::parser::Parser;
 
     #[test]
     fn test_log_debug_parsing() {
