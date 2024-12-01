@@ -5,6 +5,11 @@ pub fn print<T: std::fmt::Display>(message: T) {
     println!("{}", message);
 }
 
+/// Print a string literal (for compiler-generated code)
+pub fn print_str(message: &str) {
+    println!("{}", message);
+}
+
 /// Read a line from standard input
 pub fn read_line() -> String {
     let mut input = String::new();

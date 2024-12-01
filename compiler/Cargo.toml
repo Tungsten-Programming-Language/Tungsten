@@ -12,5 +12,7 @@ name = "w"
 path = "src/main.rs"
 
 [dependencies]
+# Add any necessary dependencies here
 
 [dev-dependencies]
+# Add development dependencies if needed

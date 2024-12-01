@@ -2,18 +2,28 @@ use crate::ast::{Expression, Operator, LogLevel};
 
 pub struct CodeGenerator {
     assembly: String,
+    data_section: String,
+    string_counter: usize,
 }
 
 impl CodeGenerator {
     pub fn new() -> Self {
         CodeGenerator {
             assembly: String::new(),
+            data_section: String::new(),
+            string_counter: 0,
         }
     }
 
     pub fn generate(&mut self, expr: &Expression) -> String {
         self.assembly.clear();
+        self.data_section.clear();
+        self.string_counter = 0;
+
         self.assembly.push_str("global _start\n");
+        self.assembly.push_str("section .data\n");
+        self.assembly.push_str(&self.data_section);
+        
         self.assembly.push_str("section .text\n");
         self.assembly.push_str("_start:\n");
     
@@ -27,6 +37,12 @@ impl CodeGenerator {
         self.assembly.clone()
     }
 
+    fn string_counter(&mut self) -> usize {
+        let current = self.string_counter;
+        self.string_counter += 1;
+        current
+    }
+
     fn generate_expression(&mut self, expr: &Expression) {
         match expr {
             Expression::Number(n) => {
@@ -37,8 +53,25 @@ impl CodeGenerator {
                 self.assembly.push_str(&format!("    ; Float value: {}\n", f));
             }
             Expression::String(s) => {
-                // Note: String handling requires more complex code generation
-                self.assembly.push_str(&format!("    ; String value: {}\n", s));
+                // Syscall-based string output with newline
+                let string_length = s.len();
+                let string_label = format!("string_{}", self.string_counter());
+                
+                // Ensure data section is populated before text section
+                if self.data_section.is_empty() {
+                    self.data_section.push_str("section .data\n");
+                }
+                
+                // Add string data to .data section with explicit newline and null terminator
+                self.data_section.push_str(&format!("{}: db '{}', 10, 0\n", string_label, s));
+                
+                // Syscall to write string
+                self.assembly.push_str(&format!("    ; Print string: {}\n", s));
+                self.assembly.push_str("    mov rax, 1       ; syscall number for write\n");
+                self.assembly.push_str("    mov rdi, 1       ; file descriptor (stdout)\n");
+                self.assembly.push_str(&format!("    mov rsi, {}\n", string_label));
+                self.assembly.push_str(&format!("    mov rdx, {}\n", string_length + 1)); // Include newline
+                self.assembly.push_str("    syscall\n");
             }
             Expression::Boolean(b) => {
                 self.assembly.push_str(&format!("    mov rax, {}\n", if *b { 1 } else { 0 }));

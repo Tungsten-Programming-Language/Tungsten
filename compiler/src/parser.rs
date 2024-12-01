@@ -18,14 +18,14 @@ impl Parser {
 
     /// Parses the entire input and returns the resulting expression
     pub fn parse(&mut self) -> Option<Expression> {
-        // Parse the entire input
-        let result = self.parse_expression();
+        // Try parsing the entire input, handling multiple expressions if needed
+        let expr = self.parse_expression();
         
-        // Ensure all tokens are consumed
-        if self.current_token.is_some() {
-            None
+        // Ensure no tokens are left unparsed
+        if self.current_token.is_none() {
+            expr
         } else {
-            result
+            None // Parsing failed if tokens remain
         }
     }
 
