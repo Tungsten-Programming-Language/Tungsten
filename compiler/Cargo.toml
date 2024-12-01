@@ -1,0 +1,16 @@
+[package]
+name = "w"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "w"
+path = "src/lib.rs"
+
+[[bin]]
+name = "w"
+path = "src/main.rs"
+
+[dependencies]
+
+[dev-dependencies]
