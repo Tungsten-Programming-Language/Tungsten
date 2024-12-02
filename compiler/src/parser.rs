@@ -1,12 +1,33 @@
+//! # W Language Parser
+//! 
+//! This parser is responsible for converting a stream of tokens into an Abstract Syntax Tree (AST).
+//! It implements a recursive descent parsing strategy, supporting various language constructs 
+//! such as function calls, binary operations, log statements, lists, maps, and more.
+//! 
+//! The parser works closely with the lexer to transform source code into a structured representation
+//! that can be further processed by other compiler stages like type checking or code generation.
+
 use crate::ast::{Expression, Operator, Type, TypeAnnotation, LogLevel};
 use crate::lexer::{Lexer, Token};
 
+/// Represents the parser state, holding a lexer and the current token being processed.
+/// 
+/// The parser maintains the context needed to parse a sequence of tokens into an Abstract Syntax Tree.
 pub struct Parser {
+    /// The lexer that provides a stream of tokens
     lexer: Lexer,
+    /// The current token being examined during parsing
     current_token: Option<Token>,
 }
 
 impl Parser {
+    /// Creates a new Parser instance from an input string.
+    /// 
+    /// # Arguments
+    /// * `input` - The source code to be parsed
+    /// 
+    /// # Returns
+    /// A new Parser with the first token loaded
     pub fn new(input: String) -> Self {
         let mut lexer = Lexer::new(input);
         let current_token = lexer.next_token();
@@ -16,7 +37,12 @@ impl Parser {
         }
     }
 
-    /// Parses the entire input and returns the resulting expression
+    /// Parses the entire input and returns the resulting expression.
+    /// 
+    /// This method attempts to parse the full input, ensuring all tokens are consumed.
+    /// 
+    /// # Returns
+    /// An optional Expression representing the parsed input, or None if parsing fails
     pub fn parse(&mut self) -> Option<Expression> {
         // Try parsing the entire input, handling multiple expressions if needed
         let expr = self.parse_expression();
@@ -29,6 +55,15 @@ impl Parser {
         }
     }
 
+    /// Attempts to parse a general expression, trying different expression types.
+    /// 
+    /// This method tries parsing expressions in a specific order:
+    /// 1. Function definitions
+    /// 2. Function calls
+    /// 3. Binary operations
+    /// 
+    /// # Returns
+    /// An optional Expression representing the parsed input, or None if parsing fails
     pub fn parse_expression(&mut self) -> Option<Expression> {
         // Try parsing function definition first
         if let Some(func_def) = self.parse_function_definition() {
@@ -184,6 +219,19 @@ impl Parser {
         Some(left)
     }
 
+    /// Parses a primary expression, which includes basic types, lists, maps, and log calls.
+    /// 
+    /// This method handles parsing of:
+    /// - Numbers (integer and float)
+    /// - Strings
+    /// - Identifiers
+    /// - Lists
+    /// - Maps
+    /// - Log calls (Debug, Info, Warn, Error)
+    /// 
+    /// # Returns
+    /// - `Some(Expression)` if a valid primary expression is found
+    /// - `None` if no valid primary expression can be parsed
     fn parse_primary(&mut self) -> Option<Expression> {
         match &self.current_token {
             Some(Token::Number(n)) => {
@@ -321,6 +369,13 @@ impl Parser {
         Some(Expression::List(elements))
     }
 
+    /// Parses a type annotation from the current token.
+    /// 
+    /// This method recognizes basic type identifiers like "int", "float", "string", and "bool".
+    /// 
+    /// # Returns
+    /// - `Some(Type)` if a valid type is found
+    /// - `None` if the current token is not a recognized type identifier
     fn parse_type(&mut self) -> Option<Type> {
         match &self.current_token {
             Some(Token::Identifier(id)) => {
@@ -338,6 +393,10 @@ impl Parser {
         }
     }
 
+    /// Advances the parser to the next token in the input stream.
+    /// 
+    /// This method updates the current_token by requesting the next token from the lexer.
+    /// It is typically called after processing the current token to move parsing forward.
     fn advance(&mut self) {
         self.current_token = self.lexer.next_token();
     }
