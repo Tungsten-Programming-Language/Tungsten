@@ -132,7 +132,7 @@ impl Parser {
             _ => return None,
         }
 
-        // Parse arguments
+        // Parse arguments (now allowing multiple)
         let mut arguments = Vec::new();
         while let Some(token) = &self.current_token {
             match token {

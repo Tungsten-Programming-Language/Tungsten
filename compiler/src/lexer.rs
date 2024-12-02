@@ -103,6 +103,8 @@ impl Lexer {
                     "LogInfo" => Some(Token::LogInfo),
                     "LogWarn" => Some(Token::LogWarn),
                     "LogError" => Some(Token::LogError),
+                    "true" => Some(Token::Boolean(true)),
+                    "false" => Some(Token::Boolean(false)),
                     _ => Some(Token::Identifier(identifier))
                 }
             }

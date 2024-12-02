@@ -61,7 +61,56 @@ impl RustCodeGenerator {
                 write!(self.output, "{}{}({});", self.indent(), log_macro, message_str)?;
             }
             Expression::BinaryOp { left, operator, right } => {
-                // Basic binary operation translation
+                let result_val = self.generate_expression_as_value(expr)?;
+                write!(self.output, "{}println!(\"{}\");", self.indent(), result_val)?;
+            }
+            Expression::FunctionCall { function, arguments } => {
+                match function.as_ref() {
+                    Expression::Identifier(name) if name == "Print" => {
+                        // Generate print call that converts all arguments to strings
+                        let print_args: Result<Vec<String>, std::fmt::Error> = arguments
+                            .iter()
+                            .map(|arg| self.generate_print_argument(arg))
+                            .collect();
+                        
+                        let print_args = print_args?;
+                        write!(
+                            self.output, 
+                            "{}println!(\"{}\");", 
+                            self.indent(), 
+                            print_args.join(" ")
+                        )?;
+                    }
+                    _ => {
+                        write!(self.output, "{}// Unsupported function call", self.indent())?;
+                    }
+                }
+            }
+            _ => {
+                write!(self.output, "{}// Unsupported expression", self.indent())?;
+            }
+        }
+        Ok(())
+    }
+
+    // New helper method to convert arguments to printable strings
+    fn generate_print_argument(&mut self, expr: &Expression) -> Result<String, std::fmt::Error> {
+        match expr {
+            Expression::Number(n) => Ok(n.to_string()),
+            Expression::String(s) => Ok(format!("{}", s)),
+            Expression::Boolean(b) => Ok(b.to_string()),
+            _ => Ok("/* unsupported print arg */".to_string()),
+        }
+    }
+
+    fn generate_expression_as_value(&mut self, expr: &Expression) -> Result<String, std::fmt::Error> {
+        match expr {
+            Expression::Number(n) => Ok(n.to_string()),
+            Expression::String(s) => Ok(format!("\"{}\"", s)),
+            Expression::BinaryOp { left, operator, right } => {
+                let left_val = self.generate_expression_as_value(left)?;
+                let right_val = self.generate_expression_as_value(right)?;
+                
                 let op_str = match operator {
                     Operator::Add => "+",
                     Operator::Subtract => "-",
@@ -71,27 +120,8 @@ impl RustCodeGenerator {
                     _ => "/* unsupported */",
                 };
                 
-                let left_val = self.generate_expression_as_value(left)?;
-                let right_val = self.generate_expression_as_value(right)?;
-                
-                write!(self.output, "{}let result = {} {} {};", 
-                    self.indent(), 
-                    left_val, 
-                    op_str, 
-                    right_val
-                )?;
+                Ok(format!("({} {} {})", left_val, op_str, right_val))
             }
-            _ => {
-                write!(self.output, "{}// Unsupported expression", self.indent())?;
-            }
-        }
-        Ok(())
-    }
-
-    fn generate_expression_as_value(&mut self, expr: &Expression) -> Result<String, std::fmt::Error> {
-        match expr {
-            Expression::Number(n) => Ok(n.to_string()),
-            Expression::String(s) => Ok(format!("\"{}\"", s)),
             _ => Ok("/* complex expression */".to_string()),
         }
     }
