@@ -1,10 +1,9 @@
 mod ast;
 mod lexer;
 mod parser;
-mod codegen;
+mod rust_codegen;
 
 use std::fs;
-// Removed unused import
 use std::fs::File;
 use std::io::Write;
 use std::process::Command;
@@ -32,34 +31,23 @@ fn main() {
     let mut parser = parser::Parser::new(input);
     let expr = parser.parse_expression().expect("Failed to parse expression");
     
-    let mut codegen = codegen::CodeGenerator::new();
-    let assembly = codegen.generate(&expr);
+    // Use Rust code generation instead of assembly
+    let mut rust_codegen = rust_codegen::RustCodeGenerator::new();
+    let rust_code = rust_codegen.generate(&expr).expect("Failed to generate Rust code");
     
-    // Write assembly to file
-    let mut file = File::create("output.asm").expect("Failed to create file");
-    file.write_all(assembly.as_bytes()).expect("Failed to write to file");
+    // Write Rust code to file
+    let output_file = "generated.rs";
+    let mut file = File::create(output_file).expect("Failed to create file");
+    file.write_all(rust_code.as_bytes()).expect("Failed to write to file");
     
-    // Print generated assembly for debugging
-    println!("Generated Assembly:\n{}", assembly);
-    
-    // Assemble and link (requires nasm and ld)
-    let nasm_status = Command::new("nasm")
-        .args(&["-f", "elf64", "output.asm"])
+    // Compile the generated Rust code
+    let rustc_status = Command::new("rustc")
+        .args(&[output_file, "-o", "output"])
         .status()
-        .expect("Failed to run nasm");
+        .expect("Failed to run rustc");
     
-    if !nasm_status.success() {
-        eprintln!("Assembler (nasm) failed");
-        std::process::exit(1);
-    }
-        
-    let ld_status = Command::new("ld")
-        .args(&["output.o", "-o", "output"])
-        .status()
-        .expect("Failed to run linker");
-    
-    if !ld_status.success() {
-        eprintln!("Linker (ld) failed");
+    if !rustc_status.success() {
+        eprintln!("Rust compiler (rustc) failed");
         std::process::exit(1);
     }
     
