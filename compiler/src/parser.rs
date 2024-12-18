@@ -249,6 +249,10 @@ impl Parser {
                 self.advance();
                 Some(expr)
             }
+            Some(Token::Identifier(id)) if id == "Cond" => {
+                self.advance();
+                self.parse_cond_expression()
+            }
             Some(Token::Identifier(id)) => {
                 let expr = Expression::Identifier(id.clone());
                 self.advance();
@@ -274,6 +278,64 @@ impl Parser {
             }
             _ => None,
         }
+    }
+
+    /// Parses a Cond expression with the structure:
+    /// Cond[[condition1 statements1] [condition2 statements2] ... [default_statements]]
+    /// 
+    /// # Returns
+    /// - `Some(Expression::Cond)` if parsing succeeds
+    /// - `None` if parsing fails
+    fn parse_cond_expression(&mut self) -> Option<Expression> {
+        // Expect left bracket for Cond
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        let mut conditions = Vec::new();
+        let mut default_statements = None;
+
+        while let Some(token) = &self.current_token {
+            match token {
+                Token::RightBracket => break,
+                Token::LeftBracket => {
+                    self.advance(); // Consume left bracket of condition pair
+
+                    // Parse condition
+                    let condition = self.parse_expression()?;
+
+                    // Parse statements for this condition
+                    let statements = self.parse_expression()?;
+
+                    // Consume right bracket of condition pair
+                    match self.current_token {
+                        Some(Token::RightBracket) => self.advance(),
+                        _ => return None,
+                    }
+
+                    // If this is the last condition and no statements parsed yet, 
+                    // treat it as default statements
+                    if conditions.is_empty() && default_statements.is_none() {
+                        default_statements = Some(Box::new(statements));
+                    } else {
+                        conditions.push((condition, statements));
+                    }
+                }
+                _ => return None,
+            }
+        }
+
+        // Consume right bracket of Cond
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::Cond {
+            conditions,
+            default_statements,
+        })
     }
 
     fn parse_log_call(&mut self, level: LogLevel) -> Option<Expression> {

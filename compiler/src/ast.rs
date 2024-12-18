@@ -55,6 +55,17 @@ pub enum Expression {
     LogCall {
         level: LogLevel,
         message: Box<Expression>,
+    },
+    /// Conditional expression similar to LISP's `cond`
+    /// 
+    /// Structure: `Cond[[condition1 statements1] [condition2 statements2] ... [default_statements]]`
+    /// 
+    /// # Variants
+    /// - `conditions`: A list of condition-statement pairs
+    /// - `default_statements`: Optional statements to execute if no conditions match
+    Cond {
+        conditions: Vec<(Expression, Expression)>,
+        default_statements: Option<Box<Expression>>,
     }
 }
 

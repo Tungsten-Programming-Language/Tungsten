@@ -86,6 +86,41 @@ impl RustCodeGenerator {
                     }
                 }
             }
+            Expression::Cond { conditions, default_statements } => {
+                // Generate Rust equivalent of Cond expression
+                write!(self.output, "{}{{", self.indent())?;
+                self.indent_level += 1;
+
+                // Generate condition checks
+                for (condition, statements) in conditions {
+                    let condition_val = self.generate_expression_as_value(condition)?;
+                    write!(
+                        self.output, 
+                        "\n{}if {} {{", 
+                        self.indent(), 
+                        condition_val
+                    )?;
+                    
+                    self.indent_level += 1;
+                    self.generate_expression(statements)?;
+                    self.indent_level -= 1;
+                    
+                    write!(self.output, "\n{}break;", self.indent())?;
+                    write!(self.output, "\n{}}", self.indent())?;
+                }
+
+                // Generate default statements if present
+                if let Some(default_expr) = default_statements {
+                    write!(self.output, "\n{}else {{", self.indent())?;
+                    self.indent_level += 1;
+                    self.generate_expression(default_expr)?;
+                    self.indent_level -= 1;
+                    write!(self.output, "\n{}}", self.indent())?;
+                }
+
+                self.indent_level -= 1;
+                write!(self.output, "\n{}}}", self.indent())?;
+            }
             _ => {
                 write!(self.output, "{}// Unsupported expression", self.indent())?;
             }
