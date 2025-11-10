@@ -112,10 +112,32 @@ impl RustCodeGenerator {
     /// Convert W type to Rust type
     fn type_to_rust(&self, ty: &Type) -> String {
         match ty {
-            Type::Int => "i64".to_string(),
-            Type::Float => "f64".to_string(),
-            Type::String => "String".to_string(),
+            // Signed integers
+            Type::Int8 => "i8".to_string(),
+            Type::Int16 => "i16".to_string(),
+            Type::Int32 => "i32".to_string(),
+            Type::Int64 => "i64".to_string(),
+            Type::Int128 => "i128".to_string(),
+            Type::Int => "isize".to_string(),
+
+            // Unsigned integers
+            Type::UInt8 => "u8".to_string(),
+            Type::UInt16 => "u16".to_string(),
+            Type::UInt32 => "u32".to_string(),
+            Type::UInt64 => "u64".to_string(),
+            Type::UInt128 => "u128".to_string(),
+            Type::UInt => "usize".to_string(),
+
+            // Floating point
+            Type::Float32 => "f32".to_string(),
+            Type::Float64 => "f64".to_string(),
+
+            // Other primitives
             Type::Bool => "bool".to_string(),
+            Type::Char => "char".to_string(),
+            Type::String => "String".to_string(),
+
+            // Complex types
             Type::List(inner) => format!("Vec<{}>", self.type_to_rust(inner)),
             Type::Map(key, value) => {
                 format!("std::collections::HashMap<{}, {}>",
@@ -128,6 +150,8 @@ impl RustCodeGenerator {
                     .collect();
                 format!("fn({}) -> {}", param_types.join(", "), self.type_to_rust(ret))
             }
+
+            // Special types
             Type::LogLevel => "LogLevel".to_string(),
         }
     }
@@ -135,13 +159,13 @@ impl RustCodeGenerator {
     /// Infer return type from expression (simplified version)
     fn infer_return_type(&self, expr: &Expression) -> String {
         match expr {
-            Expression::Number(_) => "i64".to_string(),
+            Expression::Number(_) => "i32".to_string(),  // Default to i32 like Rust
             Expression::Float(_) => "f64".to_string(),
             Expression::String(_) => "String".to_string(),
             Expression::Boolean(_) => "bool".to_string(),
-            Expression::List(_) => "Vec<i64>".to_string(), // Simplified
+            Expression::List(_) => "Vec<i32>".to_string(), // Simplified
             Expression::Map(_) => "HashMap<String, String>".to_string(), // Simplified
-            Expression::BinaryOp { .. } => "i64".to_string(), // Simplified
+            Expression::BinaryOp { .. } => "i32".to_string(), // Simplified - default to i32
             _ => "()".to_string(),
         }
     }

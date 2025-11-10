@@ -35,9 +35,9 @@ pub enum Token {
     /// Define token `:=` for function definitions
     Define,
 
-    /// 64-bit integer literal
-    Number(i64),
-    /// 64-bit floating-point literal
+    /// 32-bit integer literal (Rust's default)
+    Number(i32),
+    /// 64-bit floating-point literal (Rust's default)
     Float(f64),
     /// String literal
     String(String),
@@ -237,17 +237,19 @@ impl Lexer {
 
     fn read_identifier(&mut self) -> String {
         let mut identifier = String::new();
-        while self.position < self.input.len() && 
-              self.input[self.position].is_alphabetic() {
+        while self.position < self.input.len() &&
+              (self.input[self.position].is_alphabetic() ||
+               self.input[self.position].is_digit(10) ||
+               self.input[self.position] == '_') {
             identifier.push(self.input[self.position]);
             self.position += 1;
         }
         identifier
     }
 
-    fn read_number(&mut self) -> i64 {
+    fn read_number(&mut self) -> i32 {
         let mut number = String::new();
-        while self.position < self.input.len() && 
+        while self.position < self.input.len() &&
               self.input[self.position].is_digit(10) {
             number.push(self.input[self.position]);
             self.position += 1;

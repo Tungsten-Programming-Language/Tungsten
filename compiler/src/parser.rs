@@ -442,9 +442,14 @@ impl Parser {
     }
 
     /// Parses a type annotation from the current token.
-    /// 
-    /// This method recognizes basic type identifiers like "int", "float", "string", and "bool".
-    /// 
+    ///
+    /// Recognizes all Rust primitive types:
+    /// - Signed integers: Int8, Int16, Int32, Int64, Int128, Int (isize)
+    /// - Unsigned integers: UInt8, UInt16, UInt32, UInt64, UInt128, UInt (usize)
+    /// - Floats: Float32, Float64
+    /// - Other primitives: Bool, Char, String
+    /// - Backward compatible: int (→ Int32), float (→ Float64)
+    ///
     /// # Returns
     /// - `Some(Type)` if a valid type is found
     /// - `None` if the current token is not a recognized type identifier
@@ -452,10 +457,38 @@ impl Parser {
         match &self.current_token {
             Some(Token::Identifier(id)) => {
                 let type_ = match id.as_str() {
-                    "int" => Type::Int,
-                    "float" => Type::Float,
+                    // Signed integers
+                    "Int8" => Type::Int8,
+                    "Int16" => Type::Int16,
+                    "Int32" => Type::Int32,
+                    "Int64" => Type::Int64,
+                    "Int128" => Type::Int128,
+                    "Int" => Type::Int,
+
+                    // Unsigned integers
+                    "UInt8" => Type::UInt8,
+                    "UInt16" => Type::UInt16,
+                    "UInt32" => Type::UInt32,
+                    "UInt64" => Type::UInt64,
+                    "UInt128" => Type::UInt128,
+                    "UInt" => Type::UInt,
+
+                    // Floating point
+                    "Float32" => Type::Float32,
+                    "Float64" => Type::Float64,
+
+                    // Other primitives
+                    "Bool" => Type::Bool,
+                    "Char" => Type::Char,
+                    "String" => Type::String,
+
+                    // Backward compatible (lowercase)
+                    "int" => Type::Int32,      // Default to i32 like Rust
+                    "float" => Type::Float64,  // Default to f64 like Rust
                     "string" => Type::String,
                     "bool" => Type::Bool,
+                    "char" => Type::Char,
+
                     _ => return None,
                 };
                 self.advance();

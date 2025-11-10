@@ -22,7 +22,7 @@ Square[x: int] := x * x
 
 **Generated Rust:**
 ```rust
-fn square(x: i64) -> i64 {
+fn square(x: i32) -> i32 {
     (x * x)
 }
 ```
@@ -102,16 +102,57 @@ fn main() {
 }
 ```
 
-## Type Mapping
+## Type System
 
-| W Type | Rust Type |
-|--------|-----------|
-| `int` | `i64` |
-| `float` | `f64` |
-| `string` | `String` |
-| `bool` | `bool` |
-| `List[T]` | `Vec<T>` |
-| `Map[K,V]` | `HashMap<K, V>` |
+### Rust-like Defaults
+Following Rust's conventions:
+- Integer literals default to `i32` (not i64)
+- Float literals default to `f64`
+- Backward compatible: `int` → `i32`, `float` → `f64`
+
+### Complete Type Mapping
+
+| W Type | Rust Type | Description |
+|--------|-----------|-------------|
+| **Signed Integers** | | |
+| `Int8` | `i8` | 8-bit signed integer |
+| `Int16` | `i16` | 16-bit signed integer |
+| `Int32` / `int` | `i32` | 32-bit signed (default) |
+| `Int64` | `i64` | 64-bit signed integer |
+| `Int128` | `i128` | 128-bit signed integer |
+| `Int` | `isize` | Pointer-sized signed |
+| **Unsigned Integers** | | |
+| `UInt8` | `u8` | 8-bit unsigned integer |
+| `UInt16` | `u16` | 16-bit unsigned integer |
+| `UInt32` | `u32` | 32-bit unsigned integer |
+| `UInt64` | `u64` | 64-bit unsigned integer |
+| `UInt128` | `u128` | 128-bit unsigned integer |
+| `UInt` | `usize` | Pointer-sized unsigned |
+| **Floating Point** | | |
+| `Float32` | `f32` | 32-bit float |
+| `Float64` / `float` | `f64` | 64-bit float (default) |
+| **Other Primitives** | | |
+| `Bool` / `bool` | `bool` | Boolean |
+| `Char` / `char` | `char` | Unicode scalar |
+| `String` / `string` | `String` | Owned string |
+| **Complex Types** | | |
+| `List[T]` | `Vec<T>` | Dynamic array |
+| `Map[K,V]` | `HashMap<K, V>` | Hash map |
+
+### Examples
+
+**Explicit Types:**
+```wolfram
+AddBytes[a: UInt8, b: UInt8] := a + b
+BigNum[x: Int64] := x * 2
+Precision[x: Float32] := x + 1.5
+```
+
+**Backward Compatible:**
+```wolfram
+Square[x: int] := x * x    (* int → i32 *)
+Average[x: float] := x / 2  (* float → f64 *)
+```
 
 ## Naming Conventions
 

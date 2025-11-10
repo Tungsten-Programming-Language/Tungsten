@@ -1,3 +1,3 @@
 fn main() {
-    println!("{} {} {} {}", "The".to_string(), "answer".to_string(), "is".to_string(), 42);
+    println!("{} {}", "Testing Int8:".to_string(), 127);
 }
