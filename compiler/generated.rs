@@ -1,3 +1,3 @@
-fn main() {
-    println!("{} {}", "Testing Int8:".to_string(), 127);
+fn use_btree_set(ordered: std::collections::BTreeSet<i64>) {
+    ordered
 }

@@ -135,20 +135,35 @@ Following Rust's conventions:
 | `Bool` / `bool` | `bool` | Boolean |
 | `Char` / `char` | `char` | Unicode scalar |
 | `String` / `string` | `String` | Owned string |
-| **Complex Types** | | |
+| **Container Types** | | |
 | `List[T]` | `Vec<T>` | Dynamic array |
+| `Array[T, N]` | `[T; N]` | Fixed-size array |
+| `Slice[T]` | `&[T]` | Slice reference |
 | `Map[K,V]` | `HashMap<K, V>` | Hash map |
+| `HashSet[T]` | `HashSet<T>` | Hash set |
+| `BTreeMap[K,V]` | `BTreeMap<K, V>` | Sorted map |
+| `BTreeSet[T]` | `BTreeSet<T>` | Sorted set |
 
 ### Examples
 
-**Explicit Types:**
+**Primitive Types:**
 ```wolfram
 AddBytes[a: UInt8, b: UInt8] := a + b
 BigNum[x: Int64] := x * 2
 Precision[x: Float32] := x + 1.5
 ```
 
-**Backward Compatible:**
+**Container Types:**
+```wolfram
+ProcessList[items: List[Int32]] := items           (* Vec<i32> *)
+FixedBuffer[arr: Array[UInt8, 256]] := arr        (* [u8; 256] *)
+ReadSlice[data: Slice[UInt8]] := data             (* &[u8] *)
+UniqueWords[words: HashSet[String]] := words      (* HashSet<String> *)
+SortedIndex[idx: BTreeMap[Int32, String]] := idx  (* BTreeMap<i32, String> *)
+OrderedSet[nums: BTreeSet[Int64]] := nums         (* BTreeSet<i64> *)
+```
+
+**Backward Compatible (lowercase):**
 ```wolfram
 Square[x: int] := x * x    (* int → i32 *)
 Average[x: float] := x / 2  (* float → f64 *)

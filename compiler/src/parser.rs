@@ -443,12 +443,9 @@ impl Parser {
 
     /// Parses a type annotation from the current token.
     ///
-    /// Recognizes all Rust primitive types:
-    /// - Signed integers: Int8, Int16, Int32, Int64, Int128, Int (isize)
-    /// - Unsigned integers: UInt8, UInt16, UInt32, UInt64, UInt128, UInt (usize)
-    /// - Floats: Float32, Float64
-    /// - Other primitives: Bool, Char, String
-    /// - Backward compatible: int (→ Int32), float (→ Float64)
+    /// Recognizes all Rust primitive types and generic container types:
+    /// - Primitives: Int8-128, UInt8-128, Float32/64, Bool, Char, String
+    /// - Containers: List[T], Array[T, N], Slice[T], Map[K,V], HashSet[T], BTreeMap[K,V], BTreeSet[T]
     ///
     /// # Returns
     /// - `Some(Type)` if a valid type is found
@@ -456,7 +453,16 @@ impl Parser {
     fn parse_type(&mut self) -> Option<Type> {
         match &self.current_token {
             Some(Token::Identifier(id)) => {
-                let type_ = match id.as_str() {
+                let type_name = id.clone();
+                self.advance();
+
+                // Check if this is a generic type (followed by [)
+                if matches!(self.current_token, Some(Token::LeftBracket)) {
+                    return self.parse_generic_type(&type_name);
+                }
+
+                // Otherwise it's a primitive type
+                let type_ = match type_name.as_str() {
                     // Signed integers
                     "Int8" => Type::Int8,
                     "Int16" => Type::Int16,
@@ -483,18 +489,91 @@ impl Parser {
                     "String" => Type::String,
 
                     // Backward compatible (lowercase)
-                    "int" => Type::Int32,      // Default to i32 like Rust
-                    "float" => Type::Float64,  // Default to f64 like Rust
+                    "int" => Type::Int32,
+                    "float" => Type::Float64,
                     "string" => Type::String,
                     "bool" => Type::Bool,
                     "char" => Type::Char,
 
                     _ => return None,
                 };
-                self.advance();
                 Some(type_)
             }
             _ => None,
+        }
+    }
+
+    /// Parse generic type syntax like List[Int32], Array[Int32, 10], Map[String, Int32]
+    fn parse_generic_type(&mut self, type_name: &str) -> Option<Type> {
+        // Consume the left bracket
+        self.advance();
+
+        match type_name {
+            "List" => {
+                let inner = Box::new(self.parse_type()?);
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::List(inner))
+            }
+            "Array" => {
+                // Array[T, N] where T is a type and N is a number
+                let inner = Box::new(self.parse_type()?);
+                self.expect_token(Token::Comma)?;
+
+                // Parse the size as a number
+                let size = match &self.current_token {
+                    Some(Token::Number(n)) => {
+                        let size = *n as usize;
+                        self.advance();
+                        size
+                    }
+                    _ => return None,
+                };
+
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::Array(inner, size))
+            }
+            "Slice" => {
+                let inner = Box::new(self.parse_type()?);
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::Slice(inner))
+            }
+            "HashSet" => {
+                let inner = Box::new(self.parse_type()?);
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::HashSet(inner))
+            }
+            "BTreeSet" => {
+                let inner = Box::new(self.parse_type()?);
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::BTreeSet(inner))
+            }
+            "Map" => {
+                // Map[K, V]
+                let key = Box::new(self.parse_type()?);
+                self.expect_token(Token::Comma)?;
+                let value = Box::new(self.parse_type()?);
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::Map(key, value))
+            }
+            "BTreeMap" => {
+                // BTreeMap[K, V]
+                let key = Box::new(self.parse_type()?);
+                self.expect_token(Token::Comma)?;
+                let value = Box::new(self.parse_type()?);
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::BTreeMap(key, value))
+            }
+            _ => None,
+        }
+    }
+
+    /// Helper to expect and consume a specific token
+    fn expect_token(&mut self, expected: Token) -> Option<()> {
+        if self.current_token == Some(expected) {
+            self.advance();
+            Some(())
+        } else {
+            None
         }
     }
 

@@ -36,8 +36,13 @@ pub enum Type {
     String,
 
     // Complex types
-    List(Box<Type>),
-    Map(Box<Type>, Box<Type>),
+    List(Box<Type>),                      // Vec<T>
+    Array(Box<Type>, usize),              // [T; N] - fixed size
+    Slice(Box<Type>),                     // &[T]
+    Map(Box<Type>, Box<Type>),            // HashMap<K, V>
+    HashSet(Box<Type>),                   // HashSet<T>
+    BTreeMap(Box<Type>, Box<Type>),       // BTreeMap<K, V>
+    BTreeSet(Box<Type>),                  // BTreeSet<T>
     Function(Vec<Type>, Box<Type>),
 
     // Special types

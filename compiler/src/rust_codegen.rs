@@ -139,11 +139,20 @@ impl RustCodeGenerator {
 
             // Complex types
             Type::List(inner) => format!("Vec<{}>", self.type_to_rust(inner)),
+            Type::Array(inner, size) => format!("[{}; {}]", self.type_to_rust(inner), size),
+            Type::Slice(inner) => format!("&[{}]", self.type_to_rust(inner)),
             Type::Map(key, value) => {
                 format!("std::collections::HashMap<{}, {}>",
                     self.type_to_rust(key),
                     self.type_to_rust(value))
             }
+            Type::HashSet(inner) => format!("std::collections::HashSet<{}>", self.type_to_rust(inner)),
+            Type::BTreeMap(key, value) => {
+                format!("std::collections::BTreeMap<{}, {}>",
+                    self.type_to_rust(key),
+                    self.type_to_rust(value))
+            }
+            Type::BTreeSet(inner) => format!("std::collections::BTreeSet<{}>", self.type_to_rust(inner)),
             Type::Function(params, ret) => {
                 let param_types: Vec<String> = params.iter()
                     .map(|p| self.type_to_rust(p))
