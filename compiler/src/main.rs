@@ -30,7 +30,7 @@ fn main() {
     
     let mut parser = parser::Parser::new(input);
     let expr = parser.parse_expression().expect("Failed to parse expression");
-    
+
     // Use Rust code generation instead of assembly
     let mut rust_codegen = rust_codegen::RustCodeGenerator::new();
     let rust_code = rust_codegen.generate(&expr).expect("Failed to generate Rust code");

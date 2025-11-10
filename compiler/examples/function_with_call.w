@@ -1,0 +1,1 @@
+Print[Square[5]]

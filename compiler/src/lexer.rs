@@ -112,6 +112,20 @@ impl Lexer {
         }
     }
 
+    /// Peek at the next token without consuming it
+    ///
+    /// # Returns
+    /// - `Some(Token)` if a valid token is found
+    /// - `None` if no more tokens are available
+    pub fn peek_token(&self) -> Option<Token> {
+        // Create a temporary clone to peek ahead
+        let mut temp_lexer = Lexer {
+            input: self.input.clone(),
+            position: self.position,
+        };
+        temp_lexer.next_token()
+    }
+
     /// Generates the next token from the input stream.
     ///
     /// # Returns
@@ -154,7 +168,13 @@ impl Lexer {
             }
             ':' => {
                 self.position += 1;
-                Some(Token::Colon)
+                // Check for :=
+                if self.position < self.input.len() && self.input[self.position] == '=' {
+                    self.position += 1;
+                    Some(Token::Define)
+                } else {
+                    Some(Token::Colon)
+                }
             }
             ',' => {
                 self.position += 1;
