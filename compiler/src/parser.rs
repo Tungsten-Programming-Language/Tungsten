@@ -306,6 +306,23 @@ impl Parser {
                 self.advance();
                 self.parse_log_call(LogLevel::Error)
             }
+            // Error handling expressions
+            Some(Token::None) => {
+                self.advance();
+                Some(Expression::None)
+            }
+            Some(Token::Some) => {
+                self.advance();
+                self.parse_some_expression()
+            }
+            Some(Token::Ok) => {
+                self.advance();
+                self.parse_ok_expression()
+            }
+            Some(Token::Err) => {
+                self.advance();
+                self.parse_err_expression()
+            }
             _ => None,
         }
     }
@@ -395,6 +412,87 @@ impl Parser {
             level,
             message,
         })
+    }
+
+    /// Parses a Some expression with the structure: Some[value]
+    ///
+    /// # Returns
+    /// - `Some(Expression::Some)` if parsing succeeds
+    /// - `None` if parsing fails
+    fn parse_some_expression(&mut self) -> Option<Expression> {
+        // Expect left bracket
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Parse value
+        let value = match self.parse_expression() {
+            Some(expr) => Box::new(expr),
+            None => return None,
+        };
+
+        // Expect right bracket
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::Some { value })
+    }
+
+    /// Parses an Ok expression with the structure: Ok[value]
+    ///
+    /// # Returns
+    /// - `Some(Expression::Ok)` if parsing succeeds
+    /// - `None` if parsing fails
+    fn parse_ok_expression(&mut self) -> Option<Expression> {
+        // Expect left bracket
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Parse value
+        let value = match self.parse_expression() {
+            Some(expr) => Box::new(expr),
+            None => return None,
+        };
+
+        // Expect right bracket
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::Ok { value })
+    }
+
+    /// Parses an Err expression with the structure: Err[error]
+    ///
+    /// # Returns
+    /// - `Some(Expression::Err)` if parsing succeeds
+    /// - `None` if parsing fails
+    fn parse_err_expression(&mut self) -> Option<Expression> {
+        // Expect left bracket
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Parse error
+        let error = match self.parse_expression() {
+            Some(expr) => Box::new(expr),
+            None => return None,
+        };
+
+        // Expect right bracket
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::Err { error })
     }
 
     fn parse_map(&mut self) -> Option<Expression> {

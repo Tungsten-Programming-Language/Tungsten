@@ -69,6 +69,16 @@ pub enum Token {
     LogInfo,    // Info log level
     LogWarn,    // Warning log level
     LogError,   // Error log level
+
+    // Error handling keywords (Rust's safety model)
+    /// None - represents empty Option value
+    None,
+    /// Some - represents present Option value
+    Some,
+    /// Ok - represents success Result value
+    Ok,
+    /// Err - represents error Result value
+    Err,
 }
 
 /// Represents the lexical analyzer (tokenizer) for the language.
@@ -244,6 +254,11 @@ impl Lexer {
                     "LogError" => Some(Token::LogError),
                     "true" => Some(Token::Boolean(true)),
                     "false" => Some(Token::Boolean(false)),
+                    // Error handling keywords
+                    "None" => Some(Token::None),
+                    "Some" => Some(Token::Some),
+                    "Ok" => Some(Token::Ok),
+                    "Err" => Some(Token::Err),
                     _ => Some(Token::Identifier(identifier))
                 }
             }

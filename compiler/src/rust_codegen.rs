@@ -200,6 +200,14 @@ impl RustCodeGenerator {
                 format!("fn({}) -> {}", param_types.join(", "), self.type_to_rust(ret))
             }
 
+            // Error handling types (Rust's safety model)
+            Type::Option(inner) => format!("Option<{}>", self.type_to_rust(inner)),
+            Type::Result(ok_type, err_type) => {
+                format!("Result<{}, {}>",
+                    self.type_to_rust(ok_type),
+                    self.type_to_rust(err_type))
+            }
+
             // Special types
             Type::LogLevel => "LogLevel".to_string(),
         }
@@ -223,7 +231,7 @@ impl RustCodeGenerator {
                 }
                 "()".to_string()
             }
-            Expression::BinaryOp { left, right, operator } => {
+            Expression::BinaryOp { left, right: _, operator } => {
                 // Infer from left operand (simplified)
                 let left_type = self.infer_return_type(left, parameters);
                 // For arithmetic operations, return the inferred type
@@ -240,6 +248,20 @@ impl RustCodeGenerator {
                     }
                     _ => "i32".to_string(),
                 }
+            }
+            // Error handling types
+            Expression::None => "Option<()>".to_string(),  // Type needs context
+            Expression::Some { value } => {
+                let inner_type = self.infer_return_type(value, parameters);
+                format!("Option<{}>", inner_type)
+            }
+            Expression::Ok { value } => {
+                let ok_type = self.infer_return_type(value, parameters);
+                format!("Result<{}, ()>", ok_type)  // Error type needs context
+            }
+            Expression::Err { error } => {
+                let err_type = self.infer_return_type(error, parameters);
+                format!("Result<(), {}>", err_type)  // Ok type needs context
             }
             _ => "()".to_string(),
         }
@@ -466,6 +488,24 @@ impl RustCodeGenerator {
 
             Expression::FunctionDefinition { .. } => {
                 Ok("/* function definitions not supported as values */".to_string())
+            }
+
+            // Error handling expressions (Rust's safety model)
+            Expression::None => Ok("None".to_string()),
+
+            Expression::Some { value } => {
+                let value_str = self.generate_expression_value(value)?;
+                Ok(format!("Some({})", value_str))
+            }
+
+            Expression::Ok { value } => {
+                let value_str = self.generate_expression_value(value)?;
+                Ok(format!("Ok({})", value_str))
+            }
+
+            Expression::Err { error } => {
+                let error_str = self.generate_expression_value(error)?;
+                Ok(format!("Err({})", error_str))
             }
         }
     }
