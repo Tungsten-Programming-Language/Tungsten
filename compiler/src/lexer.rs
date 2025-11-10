@@ -35,9 +35,9 @@ pub enum Token {
     /// Define token `:=` for function definitions
     Define,
 
-    /// 64-bit integer literal
-    Number(i64),
-    /// 64-bit floating-point literal
+    /// 32-bit integer literal (Rust's default)
+    Number(i32),
+    /// 64-bit floating-point literal (Rust's default)
     Float(f64),
     /// String literal
     String(String),
@@ -112,6 +112,20 @@ impl Lexer {
         }
     }
 
+    /// Peek at the next token without consuming it
+    ///
+    /// # Returns
+    /// - `Some(Token)` if a valid token is found
+    /// - `None` if no more tokens are available
+    pub fn peek_token(&self) -> Option<Token> {
+        // Create a temporary clone to peek ahead
+        let mut temp_lexer = Lexer {
+            input: self.input.clone(),
+            position: self.position,
+        };
+        temp_lexer.next_token()
+    }
+
     /// Generates the next token from the input stream.
     ///
     /// # Returns
@@ -154,7 +168,13 @@ impl Lexer {
             }
             ':' => {
                 self.position += 1;
-                Some(Token::Colon)
+                // Check for :=
+                if self.position < self.input.len() && self.input[self.position] == '=' {
+                    self.position += 1;
+                    Some(Token::Define)
+                } else {
+                    Some(Token::Colon)
+                }
             }
             ',' => {
                 self.position += 1;
@@ -179,6 +199,36 @@ impl Lexer {
             '^' => {
                 self.position += 1;
                 Some(Token::Power)
+            }
+            '=' => {
+                self.position += 1;
+                // Check for ==
+                if self.position < self.input.len() && self.input[self.position] == '=' {
+                    self.position += 1;
+                    Some(Token::Equals)
+                } else {
+                    // Single = is not a token in this language
+                    None
+                }
+            }
+            '!' => {
+                self.position += 1;
+                // Check for !=
+                if self.position < self.input.len() && self.input[self.position] == '=' {
+                    self.position += 1;
+                    Some(Token::NotEquals)
+                } else {
+                    // Single ! is not a token in this language
+                    None
+                }
+            }
+            '<' => {
+                self.position += 1;
+                Some(Token::LessThan)
+            }
+            '>' => {
+                self.position += 1;
+                Some(Token::GreaterThan)
             }
             '"' => {
                 // Handle string literals
@@ -217,17 +267,19 @@ impl Lexer {
 
     fn read_identifier(&mut self) -> String {
         let mut identifier = String::new();
-        while self.position < self.input.len() && 
-              self.input[self.position].is_alphabetic() {
+        while self.position < self.input.len() &&
+              (self.input[self.position].is_alphabetic() ||
+               self.input[self.position].is_digit(10) ||
+               self.input[self.position] == '_') {
             identifier.push(self.input[self.position]);
             self.position += 1;
         }
         identifier
     }
 
-    fn read_number(&mut self) -> i64 {
+    fn read_number(&mut self) -> i32 {
         let mut number = String::new();
-        while self.position < self.input.len() && 
+        while self.position < self.input.len() &&
               self.input[self.position].is_digit(10) {
             number.push(self.input[self.position]);
             self.position += 1;

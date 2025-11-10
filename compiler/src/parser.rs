@@ -10,6 +10,12 @@
 use crate::ast::{Expression, Operator, Type, TypeAnnotation, LogLevel};
 use crate::lexer::{Lexer, Token};
 
+/// Helper enum to distinguish between function arguments and parameters during parsing
+enum ArgumentOrParameter {
+    Expression(Expression),
+    Parameter(TypeAnnotation),
+}
+
 /// Represents the parser state, holding a lexer and the current token being processed.
 /// 
 /// The parser maintains the context needed to parse a sequence of tokens into an Abstract Syntax Tree.
@@ -65,22 +71,36 @@ impl Parser {
     /// # Returns
     /// An optional Expression representing the parsed input, or None if parsing fails
     pub fn parse_expression(&mut self) -> Option<Expression> {
-        // Try parsing function definition first
-        if let Some(func_def) = self.parse_function_definition() {
-            return Some(func_def);
+        // Check if this might be a function (call or definition)
+        // by looking for Identifier followed by [
+        if let Some(Token::Identifier(id)) = &self.current_token {
+            // Special handling for Cond - don't treat it as a regular function call
+            if id == "Cond" {
+                self.advance();
+                return self.parse_cond_expression();
+            }
+
+            // Peek ahead to check if next token is LeftBracket
+            // We need to check this to avoid consuming tokens unnecessarily
+            let is_function_syntax = self.lexer.peek_token()
+                .map(|t| matches!(t, Token::LeftBracket))
+                .unwrap_or(false);
+
+            if is_function_syntax {
+                // Try to parse as function call or definition
+                if let Some(func_or_call) = self.parse_function_or_call() {
+                    return Some(func_or_call);
+                }
+            }
         }
 
-        // Then try function call
-        if let Some(func_call) = self.parse_function_call() {
-            return Some(func_call);
-        }
-
-        // Then try binary operations
+        // Try binary operations
         self.parse_binary_operation()
     }
 
-    fn parse_function_definition(&mut self) -> Option<Expression> {
-        // Check for function definition syntax: f[x, y] := body
+    /// Parse either a function definition or function call
+    fn parse_function_or_call(&mut self) -> Option<Expression> {
+        // Get the identifier
         let name = match &self.current_token {
             Some(Token::Identifier(id)) => id.clone(),
             _ => return None,
@@ -93,105 +113,101 @@ impl Parser {
             _ => return None,
         }
 
-        // Parse parameters with optional type annotations
-        let mut parameters = Vec::new();
-        while self.current_token.is_some() {
-            let param_name = match &self.current_token {
-                Some(Token::Identifier(name)) => name.clone(),
-                Some(Token::RightBracket) => break,
-                _ => return None,
-            };
-            self.advance();
-
-            // Check for type annotation
-            let param_type = match self.current_token {
-                Some(Token::Colon) => {
+        // Parse the contents of the brackets (could be parameters or arguments)
+        // We'll determine whether this is a function definition or call
+        // by checking for := after the closing bracket
+        let mut items = Vec::new();
+        loop {
+            match &self.current_token {
+                Some(Token::RightBracket) => {
                     self.advance();
-                    match self.parse_type() {
-                        Some(t) => t,
-                        None => Type::Int, // Default type if not specified
-                    }
-                },
-                _ => Type::Int, // Default type if not specified
-            };
-
-            parameters.push(TypeAnnotation {
-                name: param_name,
-                type_: param_type,
-            });
-
-            // Handle comma or end of parameter list
-            match self.current_token {
-                Some(Token::Comma) => self.advance(),
-                Some(Token::RightBracket) => break,
-                _ => return None,
-            }
-        }
-        
-        // Consume right bracket
-        match self.current_token {
-            Some(Token::RightBracket) => self.advance(),
-            _ => return None,
-        }
-
-        // Expect define token
-        match self.current_token {
-            Some(Token::Define) => self.advance(),
-            _ => return None,
-        }
-
-        // Parse function body
-        let body = match self.parse_expression() {
-            Some(expr) => Box::new(expr),
-            None => return None,
-        };
-
-        Some(Expression::FunctionDefinition {
-            name,
-            parameters,
-            body,
-        })
-    }
-
-    fn parse_function_call(&mut self) -> Option<Expression> {
-        // Function call syntax: Function[arg1, arg2, ...]
-        let function = match &self.current_token {
-            Some(Token::Identifier(_)) | Some(Token::LeftBracket) => 
-                Box::new(self.parse_expression()?),
-            _ => return None,
-        };
-
-        // Expect left bracket for arguments
-        match self.current_token {
-            Some(Token::LeftBracket) => self.advance(),
-            _ => return None,
-        }
-
-        // Parse arguments (now allowing multiple)
-        let mut arguments = Vec::new();
-        while let Some(token) = &self.current_token {
-            match token {
-                Token::RightBracket => break,
+                    break;
+                }
+                Some(Token::Comma) => {
+                    self.advance();
+                }
                 _ => {
-                    let arg = self.parse_expression()?;
-                    arguments.push(arg);
-
-                    // Handle comma between arguments
-                    match self.current_token {
-                        Some(Token::Comma) => self.advance(),
-                        Some(Token::RightBracket) => break,
-                        _ => return None,
+                    if let Some(item) = self.parse_argument_or_parameter() {
+                        items.push(item);
+                    } else {
+                        return None;
                     }
                 }
             }
         }
-        self.advance(); // Consume right bracket
 
-        Some(Expression::FunctionCall {
-            function,
-            arguments,
-        })
+        // Now check if next token is :=
+        match &self.current_token {
+            Some(Token::Define) => {
+                // It's a function definition
+                self.advance();
+
+                // Convert items to parameters
+                let parameters: Vec<TypeAnnotation> = items.into_iter()
+                    .filter_map(|item| {
+                        if let ArgumentOrParameter::Parameter(p) = item {
+                            Some(p)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                // Parse body
+                let body = Box::new(self.parse_expression()?);
+
+                Some(Expression::FunctionDefinition {
+                    name,
+                    parameters,
+                    body,
+                })
+            }
+            _ => {
+                // It's a function call
+                let arguments: Vec<Expression> = items.into_iter()
+                    .filter_map(|item| {
+                        match item {
+                            ArgumentOrParameter::Expression(e) => Some(e),
+                            ArgumentOrParameter::Parameter(_) => None,
+                        }
+                    })
+                    .collect();
+
+                Some(Expression::FunctionCall {
+                    function: Box::new(Expression::Identifier(name)),
+                    arguments,
+                })
+            }
+        }
     }
+
+    fn parse_argument_or_parameter(&mut self) -> Option<ArgumentOrParameter> {
+        // Try to parse as parameter (identifier with optional type)
+        if let Some(Token::Identifier(name)) = &self.current_token {
+            // Peek ahead to see if this is a type annotation
+            let next_is_colon = self.lexer.peek_token()
+                .map(|t| matches!(t, Token::Colon))
+                .unwrap_or(false);
+
+            if next_is_colon {
+                // Parse as parameter with type annotation
+                let param_name = name.clone();
+                self.advance(); // consume identifier
+                self.advance(); // consume colon
+
+                if let Some(ty) = self.parse_type() {
+                    return Some(ArgumentOrParameter::Parameter(TypeAnnotation {
+                        name: param_name,
+                        type_: ty,
+                    }));
+                }
+            }
+        }
+
+        // Parse as general expression (handles identifiers, function calls, etc.)
+        self.parse_expression().map(ArgumentOrParameter::Expression)
+    }
+
 
     fn parse_binary_operation(&mut self) -> Option<Expression> {
         let mut left = self.parse_primary()?;
@@ -203,6 +219,10 @@ impl Parser {
                 Token::Multiply => Operator::Multiply,
                 Token::Divide => Operator::Divide,
                 Token::Power => Operator::Power,
+                Token::Equals => Operator::Equals,
+                Token::NotEquals => Operator::NotEquals,
+                Token::LessThan => Operator::LessThan,
+                Token::GreaterThan => Operator::GreaterThan,
                 _ => break,
             };
 
@@ -302,24 +322,28 @@ impl Parser {
                 Token::LeftBracket => {
                     self.advance(); // Consume left bracket of condition pair
 
-                    // Parse condition
-                    let condition = self.parse_expression()?;
+                    // Parse first expression
+                    let first_expr = self.parse_expression()?;
 
-                    // Parse statements for this condition
-                    let statements = self.parse_expression()?;
+                    // Try to parse second expression (if it exists, this is a condition-statement pair)
+                    // If there's a RightBracket next, this is a default statement
+                    let is_default = matches!(self.current_token, Some(Token::RightBracket));
 
-                    // Consume right bracket of condition pair
-                    match self.current_token {
-                        Some(Token::RightBracket) => self.advance(),
-                        _ => return None,
-                    }
-
-                    // If this is the last condition and no statements parsed yet, 
-                    // treat it as default statements
-                    if conditions.is_empty() && default_statements.is_none() {
-                        default_statements = Some(Box::new(statements));
+                    if is_default {
+                        // This bracket contains only one expression - it's the default
+                        self.advance(); // Consume right bracket
+                        default_statements = Some(Box::new(first_expr));
                     } else {
-                        conditions.push((condition, statements));
+                        // Parse the second expression (statements for this condition)
+                        let statements = self.parse_expression()?;
+
+                        // Consume right bracket of condition pair
+                        match self.current_token {
+                            Some(Token::RightBracket) => self.advance(),
+                            _ => return None,
+                        }
+
+                        conditions.push((first_expr, statements));
                     }
                 }
                 _ => return None,
@@ -432,26 +456,138 @@ impl Parser {
     }
 
     /// Parses a type annotation from the current token.
-    /// 
-    /// This method recognizes basic type identifiers like "int", "float", "string", and "bool".
-    /// 
+    ///
+    /// Recognizes all Rust primitive types and generic container types:
+    /// - Primitives: Int8-128, UInt8-128, Float32/64, Bool, Char, String
+    /// - Containers: List[T], Array[T, N], Slice[T], Map[K,V], HashSet[T], BTreeMap[K,V], BTreeSet[T]
+    ///
     /// # Returns
     /// - `Some(Type)` if a valid type is found
     /// - `None` if the current token is not a recognized type identifier
     fn parse_type(&mut self) -> Option<Type> {
         match &self.current_token {
             Some(Token::Identifier(id)) => {
-                let type_ = match id.as_str() {
-                    "int" => Type::Int,
-                    "float" => Type::Float,
+                let type_name = id.clone();
+                self.advance();
+
+                // Check if this is a generic type (followed by [)
+                if matches!(self.current_token, Some(Token::LeftBracket)) {
+                    return self.parse_generic_type(&type_name);
+                }
+
+                // Otherwise it's a primitive type
+                let type_ = match type_name.as_str() {
+                    // Signed integers
+                    "Int8" => Type::Int8,
+                    "Int16" => Type::Int16,
+                    "Int32" => Type::Int32,
+                    "Int64" => Type::Int64,
+                    "Int128" => Type::Int128,
+                    "Int" => Type::Int,
+
+                    // Unsigned integers
+                    "UInt8" => Type::UInt8,
+                    "UInt16" => Type::UInt16,
+                    "UInt32" => Type::UInt32,
+                    "UInt64" => Type::UInt64,
+                    "UInt128" => Type::UInt128,
+                    "UInt" => Type::UInt,
+
+                    // Floating point
+                    "Float32" => Type::Float32,
+                    "Float64" => Type::Float64,
+
+                    // Other primitives
+                    "Bool" => Type::Bool,
+                    "Char" => Type::Char,
+                    "String" => Type::String,
+
+                    // Backward compatible (lowercase)
+                    "int" => Type::Int32,
+                    "float" => Type::Float64,
                     "string" => Type::String,
                     "bool" => Type::Bool,
+                    "char" => Type::Char,
+
                     _ => return None,
                 };
-                self.advance();
                 Some(type_)
             }
             _ => None,
+        }
+    }
+
+    /// Parse generic type syntax like List[Int32], Array[Int32, 10], Map[String, Int32]
+    fn parse_generic_type(&mut self, type_name: &str) -> Option<Type> {
+        // Consume the left bracket
+        self.advance();
+
+        match type_name {
+            "List" => {
+                let inner = Box::new(self.parse_type()?);
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::List(inner))
+            }
+            "Array" => {
+                // Array[T, N] where T is a type and N is a number
+                let inner = Box::new(self.parse_type()?);
+                self.expect_token(Token::Comma)?;
+
+                // Parse the size as a number
+                let size = match &self.current_token {
+                    Some(Token::Number(n)) => {
+                        let size = *n as usize;
+                        self.advance();
+                        size
+                    }
+                    _ => return None,
+                };
+
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::Array(inner, size))
+            }
+            "Slice" => {
+                let inner = Box::new(self.parse_type()?);
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::Slice(inner))
+            }
+            "HashSet" => {
+                let inner = Box::new(self.parse_type()?);
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::HashSet(inner))
+            }
+            "BTreeSet" => {
+                let inner = Box::new(self.parse_type()?);
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::BTreeSet(inner))
+            }
+            "Map" => {
+                // Map[K, V]
+                let key = Box::new(self.parse_type()?);
+                self.expect_token(Token::Comma)?;
+                let value = Box::new(self.parse_type()?);
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::Map(key, value))
+            }
+            "BTreeMap" => {
+                // BTreeMap[K, V]
+                let key = Box::new(self.parse_type()?);
+                self.expect_token(Token::Comma)?;
+                let value = Box::new(self.parse_type()?);
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::BTreeMap(key, value))
+            }
+            _ => None,
+        }
+    }
+
+    /// Helper to expect and consume a specific token
+    fn expect_token(&mut self, expected: Token) -> Option<()> {
+        if self.current_token == Some(expected) {
+            self.advance();
+            Some(())
+        } else {
+            None
         }
     }
 

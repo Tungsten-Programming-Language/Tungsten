@@ -7,18 +7,46 @@ pub enum LogLevel {
     Error,
 }
 
-#[repr(u8)]
 #[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub enum Type {
-    Int = 0,
-    Float = 1,
-    String = 2,
-    Bool = 3,
-    List(Box<Type>) = 4,
-    Map(Box<Type>, Box<Type>) = 5,
-    Function(Vec<Type>, Box<Type>) = 6,
-    LogLevel = 7,
+    // Signed integers
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Int128,
+    Int,  // isize
+
+    // Unsigned integers
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+    UInt128,
+    UInt,  // usize
+
+    // Floating point
+    Float32,
+    Float64,
+
+    // Other primitives
+    Bool,
+    Char,
+    String,
+
+    // Complex types
+    List(Box<Type>),                      // Vec<T>
+    Array(Box<Type>, usize),              // [T; N] - fixed size
+    Slice(Box<Type>),                     // &[T]
+    Map(Box<Type>, Box<Type>),            // HashMap<K, V>
+    HashSet(Box<Type>),                   // HashSet<T>
+    BTreeMap(Box<Type>, Box<Type>),       // BTreeMap<K, V>
+    BTreeSet(Box<Type>),                  // BTreeSet<T>
+    Function(Vec<Type>, Box<Type>),
+
+    // Special types
+    LogLevel,
 }
 
 #[allow(dead_code)]
@@ -31,7 +59,7 @@ pub struct TypeAnnotation {
 #[allow(dead_code)]
 #[derive(Debug)]
 pub enum Expression {
-    Number(i64),
+    Number(i32),  // Default to i32 like Rust
     Float(f64),
     String(String),
     Boolean(bool),

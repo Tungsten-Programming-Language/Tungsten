@@ -91,29 +91,41 @@ mod tests {
     #[test]
     fn test_cond_single_condition() {
         let mut parser = Parser::new("Cond[[x > 10 Print[\"Greater than 10\"]]]".to_string());
-        let expr = parser.parse().unwrap();
-        
+        let expr = parser.parse_expression().unwrap();
+
         match expr {
             Expression::Cond { conditions, default_statements } => {
-                assert_eq!(conditions.len(), 0);
-                assert!(default_statements.is_some());
-                
-                match *default_statements.unwrap() {
-                    Expression::FunctionCall { 
-                        function: func, 
-                        arguments 
-                    } => {
-                        match *func {
-                            Expression::Identifier(name) => assert_eq!(name, "Print"),
-                            _ => panic!("Expected Print function"),
+                assert_eq!(conditions.len(), 1);
+                assert!(default_statements.is_none());
+
+                // Check the condition
+                match &conditions[0] {
+                    (condition, statements) => {
+                        match condition {
+                            Expression::BinaryOp { left, operator: _, right: _ } => {
+                                match **left {
+                                    Expression::Identifier(ref name) => assert_eq!(name, "x"),
+                                    _ => panic!("Expected x identifier"),
+                                }
+                            }
+                            _ => panic!("Expected binary operation"),
                         }
-                        assert_eq!(arguments.len(), 1);
-                        match arguments[0] {
-                            Expression::String(ref msg) => assert_eq!(msg, "Greater than 10"),
-                            _ => panic!("Expected string argument"),
+
+                        match statements {
+                            Expression::FunctionCall { function, arguments } => {
+                                match **function {
+                                    Expression::Identifier(ref name) => assert_eq!(name, "Print"),
+                                    _ => panic!("Expected Print function"),
+                                }
+                                assert_eq!(arguments.len(), 1);
+                                match arguments[0] {
+                                    Expression::String(ref msg) => assert_eq!(msg, "Greater than 10"),
+                                    _ => panic!("Expected string argument"),
+                                }
+                            }
+                            _ => panic!("Expected function call"),
                         }
                     }
-                    _ => panic!("Expected function call"),
                 }
             }
             _ => panic!("Expected Cond expression"),
@@ -123,7 +135,7 @@ mod tests {
     #[test]
     fn test_cond_multiple_conditions() {
         let mut parser = Parser::new("Cond[[x > 10 Print[\"Greater than 10\"]] [x < 5 Print[\"Less than 5\"]] [Print[\"Between 5 and 10\"]]]".to_string());
-        let expr = parser.parse().unwrap();
+        let expr = parser.parse_expression().unwrap();
         
         match expr {
             Expression::Cond { conditions, default_statements } => {
@@ -133,7 +145,7 @@ mod tests {
                 match &conditions[0] {
                     (condition, statements) => {
                         match condition {
-                            Expression::BinaryOp { left, operator: _, right } => {
+                            Expression::BinaryOp { left, operator: _, right: _ } => {
                                 match **left {
                                     Expression::Identifier(ref name) => assert_eq!(name, "x"),
                                     _ => panic!("Expected x identifier"),
@@ -163,7 +175,7 @@ mod tests {
                 match &conditions[1] {
                     (condition, statements) => {
                         match condition {
-                            Expression::BinaryOp { left, operator: _, right } => {
+                            Expression::BinaryOp { left, operator: _, right: _ } => {
                                 match **left {
                                     Expression::Identifier(ref name) => assert_eq!(name, "x"),
                                     _ => panic!("Expected x identifier"),
@@ -213,7 +225,7 @@ mod tests {
     #[test]
     fn test_cond_with_numeric_conditions() {
         let mut parser = Parser::new("Cond[[42 Print[\"The answer\"]] [0 Print[\"Zero\"]]]".to_string());
-        let expr = parser.parse().unwrap();
+        let expr = parser.parse_expression().unwrap();
         
         match expr {
             Expression::Cond { conditions, default_statements } => {
