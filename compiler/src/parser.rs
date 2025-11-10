@@ -73,7 +73,13 @@ impl Parser {
     pub fn parse_expression(&mut self) -> Option<Expression> {
         // Check if this might be a function (call or definition)
         // by looking for Identifier followed by [
-        if let Some(Token::Identifier(_)) = &self.current_token {
+        if let Some(Token::Identifier(id)) = &self.current_token {
+            // Special handling for Cond - don't treat it as a regular function call
+            if id == "Cond" {
+                self.advance();
+                return self.parse_cond_expression();
+            }
+
             // Peek ahead to check if next token is LeftBracket
             // We need to check this to avoid consuming tokens unnecessarily
             let is_function_syntax = self.lexer.peek_token()
@@ -213,6 +219,10 @@ impl Parser {
                 Token::Multiply => Operator::Multiply,
                 Token::Divide => Operator::Divide,
                 Token::Power => Operator::Power,
+                Token::Equals => Operator::Equals,
+                Token::NotEquals => Operator::NotEquals,
+                Token::LessThan => Operator::LessThan,
+                Token::GreaterThan => Operator::GreaterThan,
                 _ => break,
             };
 
@@ -312,24 +322,28 @@ impl Parser {
                 Token::LeftBracket => {
                     self.advance(); // Consume left bracket of condition pair
 
-                    // Parse condition
-                    let condition = self.parse_expression()?;
+                    // Parse first expression
+                    let first_expr = self.parse_expression()?;
 
-                    // Parse statements for this condition
-                    let statements = self.parse_expression()?;
+                    // Try to parse second expression (if it exists, this is a condition-statement pair)
+                    // If there's a RightBracket next, this is a default statement
+                    let is_default = matches!(self.current_token, Some(Token::RightBracket));
 
-                    // Consume right bracket of condition pair
-                    match self.current_token {
-                        Some(Token::RightBracket) => self.advance(),
-                        _ => return None,
-                    }
-
-                    // If this is the last condition and no statements parsed yet, 
-                    // treat it as default statements
-                    if conditions.is_empty() && default_statements.is_none() {
-                        default_statements = Some(Box::new(statements));
+                    if is_default {
+                        // This bracket contains only one expression - it's the default
+                        self.advance(); // Consume right bracket
+                        default_statements = Some(Box::new(first_expr));
                     } else {
-                        conditions.push((condition, statements));
+                        // Parse the second expression (statements for this condition)
+                        let statements = self.parse_expression()?;
+
+                        // Consume right bracket of condition pair
+                        match self.current_token {
+                            Some(Token::RightBracket) => self.advance(),
+                            _ => return None,
+                        }
+
+                        conditions.push((first_expr, statements));
                     }
                 }
                 _ => return None,

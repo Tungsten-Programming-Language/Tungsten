@@ -200,6 +200,36 @@ impl Lexer {
                 self.position += 1;
                 Some(Token::Power)
             }
+            '=' => {
+                self.position += 1;
+                // Check for ==
+                if self.position < self.input.len() && self.input[self.position] == '=' {
+                    self.position += 1;
+                    Some(Token::Equals)
+                } else {
+                    // Single = is not a token in this language
+                    None
+                }
+            }
+            '!' => {
+                self.position += 1;
+                // Check for !=
+                if self.position < self.input.len() && self.input[self.position] == '=' {
+                    self.position += 1;
+                    Some(Token::NotEquals)
+                } else {
+                    // Single ! is not a token in this language
+                    None
+                }
+            }
+            '<' => {
+                self.position += 1;
+                Some(Token::LessThan)
+            }
+            '>' => {
+                self.position += 1;
+                Some(Token::GreaterThan)
+            }
             '"' => {
                 // Handle string literals
                 Some(Token::String(self.read_string()))

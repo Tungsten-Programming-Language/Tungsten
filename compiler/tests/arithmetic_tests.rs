@@ -23,25 +23,25 @@ fn evaluate(input: &str) -> i64 {
                 }
                 
                 match op.as_str() {
-                    "Plus" => numbers.iter().sum(),
+                    "Plus" => numbers.iter().map(|&n| n as i64).sum(),
                     "Minus" => {
                         if numbers.len() == 1 {
-                            numbers[0]
+                            numbers[0] as i64
                         } else {
                             panic!("Minus operation requires exactly one argument")
                         }
                     },
                     "Power" => { // Add this block
                         if numbers.len() == 2 {
-                            numbers[0].pow(numbers[1] as u32)
+                            (numbers[0].pow(numbers[1] as u32)) as i64
                         } else {
                             panic!("Power operation requires exactly two arguments")
                         }
                     },
-                    "Multiply" => numbers.iter().product(),
+                    "Multiply" => numbers.iter().map(|&n| n as i64).product(),
                     "Divide" => {
                         if numbers.len() == 2 {
-                            numbers[0] / numbers[1]
+                            (numbers[0] / numbers[1]) as i64
                         } else {
                             panic!("Divide operation requires exactly two arguments")
                         }
