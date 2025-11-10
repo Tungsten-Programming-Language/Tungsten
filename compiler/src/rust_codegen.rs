@@ -30,14 +30,54 @@ impl RustCodeGenerator {
         self.output.clear();
         self.indent_level = 0;
 
-        // Check if this is a function definition or needs to be wrapped in main
+        // Check if this is a program with multiple expressions
         match expr {
+            Expression::Program(expressions) => {
+                // Separate function definitions from other expressions
+                let mut functions = Vec::new();
+                let mut statements = Vec::new();
+
+                for e in expressions {
+                    match e {
+                        Expression::FunctionDefinition { .. } => functions.push(e),
+                        _ => statements.push(e),
+                    }
+                }
+
+                // Generate all function definitions first
+                for func in &functions {
+                    self.generate_top_level_item(func)?;
+                    writeln!(self.output)?;
+                }
+
+                // Generate main function with statements
+                if statements.is_empty() {
+                    // Just function definitions, add stub main
+                    writeln!(self.output, "fn main() {{")?;
+                    writeln!(self.output, "    // Stub main function for compilation")?;
+                    writeln!(self.output, "}}")?;
+                } else {
+                    // Generate main with statements
+                    writeln!(self.output, "fn main() {{")?;
+                    self.indent_level += 1;
+                    for stmt in &statements {
+                        self.generate_statement(stmt)?;
+                    }
+                    self.indent_level -= 1;
+                    writeln!(self.output, "}}")?;
+                }
+            }
             Expression::FunctionDefinition { .. } => {
-                // Generate function definition directly
+                // Single function definition
                 self.generate_top_level_item(expr)?;
+                // Add a stub main function to make it compilable
+                writeln!(self.output)?;
+                writeln!(self.output, "fn main() {{")?;
+                writeln!(self.output, "    // Stub main function for compilation")?;
+                writeln!(self.output, "}}")?;
             }
             _ => {
-                // Wrap in main function
+                // Single expression, wrap in main function
                 writeln!(self.output, "fn main() {{")?;
                 self.indent_level += 1;
                 self.generate_statement(expr)?;
@@ -88,7 +128,7 @@ impl RustCodeGenerator {
         write!(self.output, ")")?;
 
         // Infer return type from body
-        let return_type = self.infer_return_type(body);
+        let return_type = self.infer_return_type(body, parameters);
         if return_type != "()" {
             write!(self.output, " -> {}", return_type)?;
         }
@@ -165,8 +205,8 @@ impl RustCodeGenerator {
         }
     }
 
-    /// Infer return type from expression (simplified version)
-    fn infer_return_type(&self, expr: &Expression) -> String {
+    /// Infer return type from expression
+    fn infer_return_type(&self, expr: &Expression, parameters: &[TypeAnnotation]) -> String {
         match expr {
             Expression::Number(_) => "i32".to_string(),  // Default to i32 like Rust
             Expression::Float(_) => "f64".to_string(),
@@ -174,7 +214,33 @@ impl RustCodeGenerator {
             Expression::Boolean(_) => "bool".to_string(),
             Expression::List(_) => "Vec<i32>".to_string(), // Simplified
             Expression::Map(_) => "HashMap<String, String>".to_string(), // Simplified
-            Expression::BinaryOp { .. } => "i32".to_string(), // Simplified - default to i32
+            Expression::Identifier(name) => {
+                // Look up the parameter type
+                for param in parameters {
+                    if param.name == *name {
+                        return self.type_to_rust(&param.type_);
+                    }
+                }
+                "()".to_string()
+            }
+            Expression::BinaryOp { left, right, operator } => {
+                // Infer from left operand (simplified)
+                let left_type = self.infer_return_type(left, parameters);
+                // For arithmetic operations, return the inferred type
+                match operator {
+                    Operator::Add | Operator::Subtract | Operator::Multiply | Operator::Divide => {
+                        // If left is a known numeric type, return it
+                        if matches!(left_type.as_str(), "i8" | "i16" | "i32" | "i64" | "i128" | "isize" |
+                                    "u8" | "u16" | "u32" | "u64" | "u128" | "usize" |
+                                    "f32" | "f64") {
+                            left_type
+                        } else {
+                            "i32".to_string() // Default
+                        }
+                    }
+                    _ => "i32".to_string(),
+                }
+            }
             _ => "()".to_string(),
         }
     }
@@ -230,6 +296,10 @@ impl RustCodeGenerator {
     /// Generate an expression that returns a value (not a statement)
     fn generate_expression_value(&mut self, expr: &Expression) -> Result<String, std::fmt::Error> {
         match expr {
+            Expression::Program(_) => {
+                // Program nodes should not appear in expression contexts
+                Err(std::fmt::Error)
+            }
             Expression::Number(n) => Ok(n.to_string()),
 
             Expression::Float(f) => Ok(f.to_string()),

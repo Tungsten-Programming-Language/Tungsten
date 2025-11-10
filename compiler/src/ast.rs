@@ -75,6 +75,7 @@ pub enum Expression {
         parameters: Vec<TypeAnnotation>,
         body: Box<Expression>,
     },
+    Program(Vec<Expression>),  // Multiple top-level expressions
     BinaryOp {
         left: Box<Expression>,
         operator: Operator,

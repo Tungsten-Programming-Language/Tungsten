@@ -259,9 +259,32 @@ impl Lexer {
     }
 
     fn skip_whitespace(&mut self) {
-        while self.position < self.input.len() && 
-              self.input[self.position].is_whitespace() {
-            self.position += 1;
+        loop {
+            // Skip whitespace
+            while self.position < self.input.len() && self.input[self.position].is_whitespace() {
+                self.position += 1;
+            }
+
+            // Check for ML-style comments (* ... *)
+            if self.position + 1 < self.input.len()
+                && self.input[self.position] == '('
+                && self.input[self.position + 1] == '*' {
+                // Skip the opening (*
+                self.position += 2;
+
+                // Find the closing *)
+                while self.position + 1 < self.input.len() {
+                    if self.input[self.position] == '*' && self.input[self.position + 1] == ')' {
+                        // Skip the closing *)
+                        self.position += 2;
+                        break;
+                    }
+                    self.position += 1;
+                }
+            } else {
+                // No more whitespace or comments to skip
+                break;
+            }
         }
     }
 

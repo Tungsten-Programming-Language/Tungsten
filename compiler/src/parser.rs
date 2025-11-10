@@ -44,20 +44,30 @@ impl Parser {
     }
 
     /// Parses the entire input and returns the resulting expression.
-    /// 
+    ///
     /// This method attempts to parse the full input, ensuring all tokens are consumed.
-    /// 
+    ///
     /// # Returns
     /// An optional Expression representing the parsed input, or None if parsing fails
     pub fn parse(&mut self) -> Option<Expression> {
-        // Try parsing the entire input, handling multiple expressions if needed
-        let expr = self.parse_expression();
-        
-        // Ensure no tokens are left unparsed
-        if self.current_token.is_none() {
-            expr
+        let mut expressions = Vec::new();
+
+        // Parse all expressions until we run out of tokens
+        while self.current_token.is_some() {
+            if let Some(expr) = self.parse_expression() {
+                expressions.push(expr);
+            } else {
+                return None; // Parsing failed
+            }
+        }
+
+        // If we have multiple expressions, wrap them in a Program node
+        if expressions.is_empty() {
+            None
+        } else if expressions.len() == 1 {
+            Some(expressions.into_iter().next().unwrap())
         } else {
-            None // Parsing failed if tokens remain
+            Some(Expression::Program(expressions))
         }
     }
 
