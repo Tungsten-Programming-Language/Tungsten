@@ -2,7 +2,7 @@
 //!
 //! Translates the W language AST into idiomatic Rust source code
 
-use crate::ast::{Expression, Operator, LogLevel, Type, TypeAnnotation};
+use crate::ast::{Expression, Operator, LogLevel, Type, TypeAnnotation, Pattern};
 use std::fmt::Write;
 
 pub struct RustCodeGenerator {
@@ -571,6 +571,114 @@ impl RustCodeGenerator {
             Expression::Err { error } => {
                 let error_str = self.generate_expression_value(error)?;
                 Ok(format!("Err({})", error_str))
+            }
+
+            Expression::Match { value, arms } => {
+                let value_str = self.generate_expression_value(value)?;
+                let mut result = format!("match {} {{\n", value_str);
+
+                for (pattern, expr) in arms {
+                    let pattern_str = self.generate_pattern(pattern)?;
+                    let expr_str = self.generate_expression_value(expr)?;
+                    result.push_str(&format!("    {} => {},\n", pattern_str, expr_str));
+                }
+
+                result.push('}');
+                Ok(result)
+            }
+        }
+    }
+
+    /// Generate Rust pattern syntax from Pattern AST
+    fn generate_pattern(&self, pattern: &Pattern) -> Result<String, std::fmt::Error> {
+        match pattern {
+            Pattern::Wildcard => Ok("_".to_string()),
+
+            Pattern::Literal(expr) => {
+                match expr.as_ref() {
+                    Expression::Number(n) => Ok(n.to_string()),
+                    // String patterns match against &str in Rust
+                    Expression::String(s) => Ok(format!("s if s == \"{}\"", s)),
+                    Expression::Boolean(b) => Ok(b.to_string()),
+                    _ => Err(std::fmt::Error),
+                }
+            }
+
+            Pattern::Variable(name) => Ok(to_snake_case(name)),
+
+            Pattern::Constructor { name, patterns } => {
+                match name.as_str() {
+                    "Some" => {
+                        if patterns.len() == 1 {
+                            let inner = self.generate_pattern(&patterns[0])?;
+                            Ok(format!("Some({})", inner))
+                        } else {
+                            Err(std::fmt::Error)
+                        }
+                    }
+                    "None" => Ok("None".to_string()),
+                    "Ok" => {
+                        if patterns.len() == 1 {
+                            let inner = self.generate_pattern(&patterns[0])?;
+                            Ok(format!("Ok({})", inner))
+                        } else {
+                            Err(std::fmt::Error)
+                        }
+                    }
+                    "Err" => {
+                        if patterns.len() == 1 {
+                            let inner = self.generate_pattern(&patterns[0])?;
+                            Ok(format!("Err({})", inner))
+                        } else {
+                            Err(std::fmt::Error)
+                        }
+                    }
+                    _ => {
+                        // Generic constructor - could be custom type
+                        let mut result = format!("{}(", name);
+                        for (i, p) in patterns.iter().enumerate() {
+                            if i > 0 {
+                                result.push_str(", ");
+                            }
+                            result.push_str(&self.generate_pattern(p)?);
+                        }
+                        result.push(')');
+                        Ok(result)
+                    }
+                }
+            }
+
+            Pattern::Tuple(patterns) => {
+                if patterns.is_empty() {
+                    Ok("()".to_string())
+                } else {
+                    let mut result = String::from("(");
+                    for (i, p) in patterns.iter().enumerate() {
+                        if i > 0 {
+                            result.push_str(", ");
+                        }
+                        result.push_str(&self.generate_pattern(p)?);
+                    }
+                    // Add trailing comma for single-element tuples
+                    if patterns.len() == 1 {
+                        result.push(',');
+                    }
+                    result.push(')');
+                    Ok(result)
+                }
+            }
+
+            Pattern::List(patterns) => {
+                // In Rust, list patterns are represented as slices
+                let mut result = String::from("[");
+                for (i, p) in patterns.iter().enumerate() {
+                    if i > 0 {
+                        result.push_str(", ");
+                    }
+                    result.push_str(&self.generate_pattern(p)?);
+                }
+                result.push(']');
+                Ok(result)
             }
         }
     }

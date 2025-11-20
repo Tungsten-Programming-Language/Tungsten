@@ -56,15 +56,36 @@ pub enum Type {
     LogLevel,
 }
 
+/// Represents patterns for pattern matching
+#[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
-#[derive(Debug)]
+pub enum Pattern {
+    /// Wildcard pattern `_` - matches anything
+    Wildcard,
+    /// Literal pattern - matches exact value
+    Literal(Box<Expression>),
+    /// Variable pattern - binds value to variable name
+    Variable(String),
+    /// Constructor pattern - e.g., Some[x], Ok[val], Err[e]
+    Constructor {
+        name: String,
+        patterns: Vec<Pattern>,
+    },
+    /// Tuple pattern - e.g., (x, y, z)
+    Tuple(Vec<Pattern>),
+    /// List pattern - e.g., [x, y, z]
+    List(Vec<Pattern>),
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TypeAnnotation {
     pub name: String,
     pub type_: Type,
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Number(i32),  // Default to i32 like Rust
     Float(f64),
@@ -120,9 +141,16 @@ pub enum Expression {
     Err {
         error: Box<Expression>,
     },
+
+    /// Pattern matching expression
+    /// Structure: Match[value, [pattern1, result1], [pattern2, result2], ...]
+    Match {
+        value: Box<Expression>,
+        arms: Vec<(Pattern, Expression)>,
+    },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub enum Operator {
     Add = 1,

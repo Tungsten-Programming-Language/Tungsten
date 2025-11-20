@@ -83,6 +83,10 @@ pub enum Token {
     Ok,
     /// Err - represents error Result value
     Err,
+
+    // Pattern matching
+    /// Underscore `_` - wildcard pattern
+    Underscore,
 }
 
 /// Represents the lexical analyzer (tokenizer) for the language.
@@ -251,6 +255,10 @@ impl Lexer {
             '>' => {
                 self.position += 1;
                 Some(Token::GreaterThan)
+            }
+            '_' => {
+                self.position += 1;
+                Some(Token::Underscore)
             }
             '"' => {
                 // Handle string literals

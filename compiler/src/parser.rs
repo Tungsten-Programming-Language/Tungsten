@@ -7,7 +7,7 @@
 //! The parser works closely with the lexer to transform source code into a structured representation
 //! that can be further processed by other compiler stages like type checking or code generation.
 
-use crate::ast::{Expression, Operator, Type, TypeAnnotation, LogLevel};
+use crate::ast::{Expression, Operator, Type, TypeAnnotation, LogLevel, Pattern};
 use crate::lexer::{Lexer, Token};
 
 /// Helper enum to distinguish between function arguments and parameters during parsing
@@ -88,6 +88,12 @@ impl Parser {
             if id == "Cond" {
                 self.advance();
                 return self.parse_cond_expression();
+            }
+
+            // Special handling for Match - pattern matching expression
+            if id == "Match" {
+                self.advance();
+                return self.parse_match_expression();
             }
 
             // Peek ahead to check if next token is LeftBracket
@@ -393,6 +399,269 @@ impl Parser {
             conditions,
             default_statements,
         })
+    }
+
+    /// Parses a Match expression with the structure:
+    /// Match[value, [pattern1, result1], [pattern2, result2], ...]
+    ///
+    /// # Returns
+    /// - `Some(Expression::Match)` if parsing succeeds
+    /// - `None` if parsing fails
+    fn parse_match_expression(&mut self) -> Option<Expression> {
+        // Expect left bracket for Match
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Parse the value to match against
+        let value = Box::new(self.parse_expression()?);
+
+        // Expect comma after value
+        match self.current_token {
+            Some(Token::Comma) => self.advance(),
+            _ => return None,
+        }
+
+        let mut arms = Vec::new();
+
+        // Parse match arms
+        while let Some(token) = &self.current_token {
+            match token {
+                Token::RightBracket => break,
+                Token::LeftBracket => {
+                    self.advance(); // Consume left bracket of arm
+
+                    // Parse the pattern
+                    let pattern = self.parse_pattern()?;
+
+                    // Expect comma between pattern and result
+                    match self.current_token {
+                        Some(Token::Comma) => self.advance(),
+                        _ => return None,
+                    }
+
+                    // Parse the result expression
+                    let result = self.parse_expression()?;
+
+                    // Consume right bracket of arm
+                    match self.current_token {
+                        Some(Token::RightBracket) => self.advance(),
+                        _ => return None,
+                    }
+
+                    arms.push((pattern, result));
+
+                    // Handle optional comma between arms
+                    if matches!(self.current_token, Some(Token::Comma)) {
+                        self.advance();
+                    }
+                }
+                _ => return None,
+            }
+        }
+
+        // Consume right bracket of Match
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::Match { value, arms })
+    }
+
+    /// Parses a pattern for use in Match expressions
+    ///
+    /// # Pattern Types
+    /// - `_` - Wildcard pattern
+    /// - Literals: `42`, `"hello"`, `true`, `false`
+    /// - Variables: `x`, `value`
+    /// - Constructors: `Some[x]`, `Ok[val]`, `None`, `Err[e]`
+    /// - Tuples: `(x, y, z)`
+    /// - Lists: `[x, y, z]`
+    fn parse_pattern(&mut self) -> Option<Pattern> {
+        match &self.current_token {
+            // Wildcard pattern
+            Some(Token::Underscore) => {
+                self.advance();
+                Some(Pattern::Wildcard)
+            }
+            // Number literal pattern
+            Some(Token::Number(n)) => {
+                let pattern = Pattern::Literal(Box::new(Expression::Number(*n)));
+                self.advance();
+                Some(pattern)
+            }
+            // String literal pattern
+            Some(Token::String(s)) => {
+                let pattern = Pattern::Literal(Box::new(Expression::String(s.clone())));
+                self.advance();
+                Some(pattern)
+            }
+            // Boolean literal pattern
+            Some(Token::Boolean(b)) => {
+                let pattern = Pattern::Literal(Box::new(Expression::Boolean(*b)));
+                self.advance();
+                Some(pattern)
+            }
+            // None constructor pattern
+            Some(Token::None) => {
+                self.advance();
+                Some(Pattern::Constructor {
+                    name: "None".to_string(),
+                    patterns: vec![],
+                })
+            }
+            // Some constructor pattern
+            Some(Token::Some) => {
+                self.advance();
+                // Expect '[' for Some[x]
+                match self.current_token {
+                    Some(Token::LeftBracket) => {
+                        self.advance();
+                        let pattern = self.parse_pattern()?;
+                        // Expect ']'
+                        match self.current_token {
+                            Some(Token::RightBracket) => self.advance(),
+                            _ => return None,
+                        }
+                        Some(Pattern::Constructor {
+                            name: "Some".to_string(),
+                            patterns: vec![pattern],
+                        })
+                    }
+                    _ => None,
+                }
+            }
+            // Ok constructor pattern
+            Some(Token::Ok) => {
+                self.advance();
+                // Expect '[' for Ok[x]
+                match self.current_token {
+                    Some(Token::LeftBracket) => {
+                        self.advance();
+                        let pattern = self.parse_pattern()?;
+                        // Expect ']'
+                        match self.current_token {
+                            Some(Token::RightBracket) => self.advance(),
+                            _ => return None,
+                        }
+                        Some(Pattern::Constructor {
+                            name: "Ok".to_string(),
+                            patterns: vec![pattern],
+                        })
+                    }
+                    _ => None,
+                }
+            }
+            // Err constructor pattern
+            Some(Token::Err) => {
+                self.advance();
+                // Expect '[' for Err[x]
+                match self.current_token {
+                    Some(Token::LeftBracket) => {
+                        self.advance();
+                        let pattern = self.parse_pattern()?;
+                        // Expect ']'
+                        match self.current_token {
+                            Some(Token::RightBracket) => self.advance(),
+                            _ => return None,
+                        }
+                        Some(Pattern::Constructor {
+                            name: "Err".to_string(),
+                            patterns: vec![pattern],
+                        })
+                    }
+                    _ => None,
+                }
+            }
+            // Identifier - could be variable binding or constructor
+            Some(Token::Identifier(id)) => {
+                let name = id.clone();
+                self.advance();
+
+                // Check if it's a constructor (followed by '[')
+                if matches!(self.current_token, Some(Token::LeftBracket)) {
+                    self.advance(); // Consume '['
+
+                    let mut patterns = Vec::new();
+
+                    // Parse constructor arguments
+                    while !matches!(self.current_token, Some(Token::RightBracket)) {
+                        patterns.push(self.parse_pattern()?);
+
+                        // Handle comma between patterns
+                        if matches!(self.current_token, Some(Token::Comma)) {
+                            self.advance();
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Consume ']'
+                    match self.current_token {
+                        Some(Token::RightBracket) => self.advance(),
+                        _ => return None,
+                    }
+
+                    Some(Pattern::Constructor { name, patterns })
+                } else {
+                    // It's a variable binding
+                    Some(Pattern::Variable(name))
+                }
+            }
+            // Tuple pattern
+            Some(Token::LeftParen) => {
+                self.advance(); // Consume '('
+
+                let mut patterns = Vec::new();
+
+                while !matches!(self.current_token, Some(Token::RightParen)) {
+                    patterns.push(self.parse_pattern()?);
+
+                    // Handle comma between patterns
+                    if matches!(self.current_token, Some(Token::Comma)) {
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+
+                // Consume ')'
+                match self.current_token {
+                    Some(Token::RightParen) => self.advance(),
+                    _ => return None,
+                }
+
+                Some(Pattern::Tuple(patterns))
+            }
+            // List pattern
+            Some(Token::LeftBracket) => {
+                self.advance(); // Consume '['
+
+                let mut patterns = Vec::new();
+
+                while !matches!(self.current_token, Some(Token::RightBracket)) {
+                    patterns.push(self.parse_pattern()?);
+
+                    // Handle comma between patterns
+                    if matches!(self.current_token, Some(Token::Comma)) {
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+
+                // Consume ']'
+                match self.current_token {
+                    Some(Token::RightBracket) => self.advance(),
+                    _ => return None,
+                }
+
+                Some(Pattern::List(patterns))
+            }
+            _ => None,
+        }
     }
 
     fn parse_log_call(&mut self, level: LogLevel) -> Option<Expression> {
