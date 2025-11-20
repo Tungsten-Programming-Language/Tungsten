@@ -102,6 +102,12 @@ impl Parser {
                 return self.parse_lambda_expression();
             }
 
+            // Special handling for Struct - struct definition
+            if id == "Struct" {
+                self.advance();
+                return self.parse_struct_definition();
+            }
+
             // Peek ahead to check if next token is LeftBracket
             // We need to check this to avoid consuming tokens unnecessarily
             let is_function_syntax = self.lexer.peek_token()
@@ -557,6 +563,88 @@ impl Parser {
         Some(Expression::Lambda { parameters, body })
     }
 
+    /// Parses a Struct definition with the structure:
+    /// Struct[Name, [field1: Type1, field2: Type2, ...]]
+    ///
+    /// # Returns
+    /// - `Some(Expression::StructDefinition)` if parsing succeeds
+    /// - `None` if parsing fails
+    fn parse_struct_definition(&mut self) -> Option<Expression> {
+        // Expect left bracket for Struct
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Parse struct name
+        let struct_name = match &self.current_token {
+            Some(Token::Identifier(name)) => name.clone(),
+            _ => return None,
+        };
+        self.advance();
+
+        // Expect comma after name
+        match self.current_token {
+            Some(Token::Comma) => self.advance(),
+            _ => return None,
+        }
+
+        // Expect left bracket for field list
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        let mut fields = Vec::new();
+
+        // Parse fields
+        while let Some(token) = &self.current_token {
+            match token {
+                Token::RightBracket => break,
+                Token::Identifier(field_name) => {
+                    let name = field_name.clone();
+                    self.advance();
+
+                    // Expect colon for type annotation
+                    match self.current_token {
+                        Some(Token::Colon) => self.advance(),
+                        _ => return None,
+                    }
+
+                    // Parse field type
+                    let field_type = self.parse_type()?;
+                    fields.push(TypeAnnotation {
+                        name,
+                        type_: field_type,
+                    });
+
+                    // Handle comma between fields
+                    if matches!(self.current_token, Some(Token::Comma)) {
+                        self.advance();
+                    }
+                }
+                _ => return None,
+            }
+        }
+
+        // Consume right bracket of field list
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Consume right bracket of Struct
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::StructDefinition {
+            name: struct_name,
+            fields,
+        })
+    }
+
     /// Parses a pattern for use in Match expressions
     ///
     /// # Pattern Types
@@ -974,7 +1062,7 @@ impl Parser {
                     return self.parse_generic_type(&type_name);
                 }
 
-                // Otherwise it's a primitive type
+                // Otherwise it's a primitive type or custom type
                 let type_ = match type_name.as_str() {
                     // Signed integers
                     "Int8" => Type::Int8,
@@ -1008,7 +1096,8 @@ impl Parser {
                     "bool" => Type::Bool,
                     "char" => Type::Char,
 
-                    _ => return None,
+                    // Unknown types are treated as custom types
+                    _ => Type::Custom(type_name),
                 };
                 Some(type_)
             }

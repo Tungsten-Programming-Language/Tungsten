@@ -54,6 +54,9 @@ pub enum Type {
 
     // Special types
     LogLevel,
+
+    // User-defined types
+    Custom(String),                       // Custom struct types
 }
 
 /// Represents patterns for pattern matching
@@ -155,6 +158,21 @@ pub enum Expression {
     Lambda {
         parameters: Vec<TypeAnnotation>,
         body: Box<Expression>,
+    },
+
+    /// Struct definition
+    /// Structure: Struct[Name, [field1: Type1, field2: Type2, ...]]
+    StructDefinition {
+        name: String,
+        fields: Vec<TypeAnnotation>,
+    },
+
+    /// Struct instantiation
+    /// Structure: StructName[value1, value2, ...]
+    /// Used when a struct type is called as a constructor
+    StructInstantiation {
+        struct_name: String,
+        field_values: Vec<Expression>,
     },
 }
 
