@@ -79,6 +79,25 @@ BTreeMap[String, Int32]          # Ordered map
 BTreeSet[Int32]                  # Ordered set
 ```
 
+### Tuples
+```
+(* Tuples - heterogeneous, fixed-size composite types *)
+(1, "hello")                     # Two-element tuple
+(42, "answer", true)             # Three-element tuple with different types
+()                               # Empty tuple (unit type)
+(42,)                            # Single-element tuple (note trailing comma)
+
+(* Nested tuples *)
+((1, 2), (3, 4))                 # Tuple of tuples
+
+(* Explicit constructor syntax *)
+Tuple[10, "test"]                # Alternative syntax
+
+(* In function signatures *)
+MakePair[x: Int32, y: String] := (x, y)
+GetFirst[pair: Tuple[Int32, String]] := pair
+```
+
 ### Option and Result Types
 ```
 (* Option types - for nullable values *)
@@ -112,6 +131,12 @@ W supports a comprehensive type system that maps directly to Rust types:
 - `Bool`
 - `Char`
 - `String`
+
+#### Composite Types
+- `Tuple[T1, T2, ...]` - Heterogeneous, fixed-size tuple ((T1, T2, ...) in Rust)
+  - Can contain different types
+  - Supports nesting: `Tuple[Int32, Tuple[String, Bool]]`
+  - Empty tuple `()` represents the unit type
 
 #### Container Types
 - `List[T]` - Dynamic array (Vec<T> in Rust)
