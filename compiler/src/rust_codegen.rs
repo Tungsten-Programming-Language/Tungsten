@@ -305,6 +305,13 @@ impl RustCodeGenerator {
                                     // Use {:?} for complex types that don't implement Display
                                     match arg {
                                         Expression::List(_) | Expression::Map(_) | Expression::Tuple(_) => "{:?}".to_string(),
+                                        // Also check for Map/Filter function calls that return Vec
+                                        Expression::FunctionCall { function, .. } => {
+                                            match function.as_ref() {
+                                                Expression::Identifier(name) if name == "Map" || name == "Filter" => "{:?}".to_string(),
+                                                _ => "{}".to_string(),
+                                            }
+                                        }
                                         _ => "{}".to_string(),
                                     }
                                 })
@@ -456,6 +463,83 @@ impl RustCodeGenerator {
                                     Ok(result)
                                 }
                             }
+                            "Map" => {
+                                // Map[function, list] -> list.into_iter().map(|x| function(x)).collect::<Vec<_>>()
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list = self.generate_expression_value(&arguments[1])?;
+                                // Extract lambda body directly for better code generation
+                                match &arguments[0] {
+                                    Expression::Lambda { parameters, body } => {
+                                        if parameters.len() == 1 {
+                                            let param = &to_snake_case(&parameters[0].name);
+                                            let body_str = self.generate_expression_value(body)?;
+                                            Ok(format!("{}.into_iter().map(|{}| {}).collect::<Vec<_>>()",
+                                                list, param, body_str))
+                                        } else {
+                                            Err(std::fmt::Error)
+                                        }
+                                    }
+                                    _ => {
+                                        let func = self.generate_expression_value(&arguments[0])?;
+                                        Ok(format!("{}.into_iter().map({}).collect::<Vec<_>>()", list, func))
+                                    }
+                                }
+                            }
+                            "Filter" => {
+                                // Filter[predicate, list] -> list.into_iter().filter(|&x| predicate(x)).collect::<Vec<_>>()
+                                // Use pattern matching to get owned values from iterator
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let func = self.generate_expression_value(&arguments[0])?;
+                                let list = self.generate_expression_value(&arguments[1])?;
+                                // Extract parameter name from lambda if possible
+                                match &arguments[0] {
+                                    Expression::Lambda { parameters, body } => {
+                                        if parameters.len() == 1 {
+                                            let param = &to_snake_case(&parameters[0].name);
+                                            let body_str = self.generate_expression_value(body)?;
+                                            // Use |&param| to pattern match and get owned value
+                                            Ok(format!("{}.into_iter().filter(|&{}| {}).collect::<Vec<_>>()",
+                                                list, param, body_str))
+                                        } else {
+                                            Err(std::fmt::Error)
+                                        }
+                                    }
+                                    _ => {
+                                        // For non-lambda functions, use the function directly
+                                        Ok(format!("{}.into_iter().filter({}).collect::<Vec<_>>()", list, func))
+                                    }
+                                }
+                            }
+                            "Fold" => {
+                                // Fold[function, init, list] -> list.into_iter().fold(init, |acc, x| function(acc, x))
+                                if arguments.len() != 3 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let init = self.generate_expression_value(&arguments[1])?;
+                                let list = self.generate_expression_value(&arguments[2])?;
+                                // Extract lambda body directly
+                                match &arguments[0] {
+                                    Expression::Lambda { parameters, body } => {
+                                        if parameters.len() == 2 {
+                                            let param1 = &to_snake_case(&parameters[0].name);
+                                            let param2 = &to_snake_case(&parameters[1].name);
+                                            let body_str = self.generate_expression_value(body)?;
+                                            Ok(format!("{}.into_iter().fold({}, |{}, {}| {})",
+                                                list, init, param1, param2, body_str))
+                                        } else {
+                                            Err(std::fmt::Error)
+                                        }
+                                    }
+                                    _ => {
+                                        let func = self.generate_expression_value(&arguments[0])?;
+                                        Ok(format!("{}.into_iter().fold({}, {})", list, init, func))
+                                    }
+                                }
+                            }
                             "Print" => {
                                 // Print returns (), so we generate a block
                                 let mut result = String::from("{\n");
@@ -467,6 +551,13 @@ impl RustCodeGenerator {
                                         .map(|arg| {
                                             match arg {
                                                 Expression::List(_) | Expression::Map(_) | Expression::Tuple(_) => "{:?}".to_string(),
+                                                // Also check for Map/Filter function calls that return Vec
+                                                Expression::FunctionCall { function, .. } => {
+                                                    match function.as_ref() {
+                                                        Expression::Identifier(name) if name == "Map" || name == "Filter" => "{:?}".to_string(),
+                                                        _ => "{}".to_string(),
+                                                    }
+                                                }
                                                 _ => "{}".to_string(),
                                             }
                                         })
@@ -584,6 +675,27 @@ impl RustCodeGenerator {
                 }
 
                 result.push('}');
+                Ok(result)
+            }
+
+            Expression::Lambda { parameters, body } => {
+                // Generate Rust closure: |param1, param2, ...| body
+                let mut result = String::from("|");
+
+                for (i, param) in parameters.iter().enumerate() {
+                    if i > 0 {
+                        result.push_str(", ");
+                    }
+                    result.push_str(&to_snake_case(&param.name));
+
+                    // Add type annotation if it's not the placeholder Int32
+                    // In the future, we'll have proper type inference
+                    // For now, only add type if it's explicitly different
+                }
+
+                result.push_str("| ");
+                result.push_str(&self.generate_expression_value(body)?);
+
                 Ok(result)
             }
         }

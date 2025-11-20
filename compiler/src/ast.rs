@@ -148,6 +148,14 @@ pub enum Expression {
         value: Box<Expression>,
         arms: Vec<(Pattern, Expression)>,
     },
+
+    /// Lambda/Closure expression
+    /// Structure: Function[{param1, param2, ...}, body]
+    /// or: Function[{param1: Type1, param2: Type2}, body]
+    Lambda {
+        parameters: Vec<TypeAnnotation>,
+        body: Box<Expression>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

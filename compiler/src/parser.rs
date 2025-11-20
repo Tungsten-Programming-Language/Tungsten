@@ -96,6 +96,12 @@ impl Parser {
                 return self.parse_match_expression();
             }
 
+            // Special handling for Function - lambda/closure expression
+            if id == "Function" {
+                self.advance();
+                return self.parse_lambda_expression();
+            }
+
             // Peek ahead to check if next token is LeftBracket
             // We need to check this to avoid consuming tokens unnecessarily
             let is_function_syntax = self.lexer.peek_token()
@@ -468,6 +474,87 @@ impl Parser {
         }
 
         Some(Expression::Match { value, arms })
+    }
+
+    /// Parses a Lambda/Closure expression with the structure:
+    /// Function[{param1, param2, ...}, body]
+    /// or Function[{param1: Type1, param2: Type2}, body]
+    ///
+    /// # Returns
+    /// - `Some(Expression::Lambda)` if parsing succeeds
+    /// - `None` if parsing fails
+    fn parse_lambda_expression(&mut self) -> Option<Expression> {
+        // Expect left bracket for Function
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Expect left brace for parameter list
+        match self.current_token {
+            Some(Token::LeftBrace) => self.advance(),
+            _ => return None,
+        }
+
+        let mut parameters = Vec::new();
+
+        // Parse parameters
+        while let Some(token) = &self.current_token {
+            match token {
+                Token::RightBrace => break,
+                Token::Identifier(name) => {
+                    let param_name = name.clone();
+                    self.advance();
+
+                    // Check for type annotation
+                    if matches!(self.current_token, Some(Token::Colon)) {
+                        self.advance(); // Consume ':'
+
+                        let param_type = self.parse_type()?;
+                        parameters.push(TypeAnnotation {
+                            name: param_name,
+                            type_: param_type,
+                        });
+                    } else {
+                        // No type annotation - will be inferred
+                        // For now, use a placeholder type
+                        parameters.push(TypeAnnotation {
+                            name: param_name,
+                            type_: Type::Int32, // Placeholder - should be inferred
+                        });
+                    }
+
+                    // Handle comma between parameters
+                    if matches!(self.current_token, Some(Token::Comma)) {
+                        self.advance();
+                    }
+                }
+                _ => return None,
+            }
+        }
+
+        // Consume right brace
+        match self.current_token {
+            Some(Token::RightBrace) => self.advance(),
+            _ => return None,
+        }
+
+        // Expect comma after parameter list
+        match self.current_token {
+            Some(Token::Comma) => self.advance(),
+            _ => return None,
+        }
+
+        // Parse body expression
+        let body = Box::new(self.parse_expression()?);
+
+        // Consume right bracket of Function
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::Lambda { parameters, body })
     }
 
     /// Parses a pattern for use in Match expressions
