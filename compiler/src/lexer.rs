@@ -27,6 +27,10 @@ pub enum Token {
     LeftBrace,
     /// Right curly brace `}`
     RightBrace,
+    /// Left parenthesis `(`
+    LeftParen,
+    /// Right parenthesis `)`
+    RightParen,
 
     /// Comma `,` used for separating elements
     Comma,
@@ -175,6 +179,14 @@ impl Lexer {
             '}' => {
                 self.position += 1;
                 Some(Token::RightBrace)
+            }
+            '(' => {
+                self.position += 1;
+                Some(Token::LeftParen)
+            }
+            ')' => {
+                self.position += 1;
+                Some(Token::RightParen)
             }
             ':' => {
                 self.position += 1;

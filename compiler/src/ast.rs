@@ -35,6 +35,9 @@ pub enum Type {
     Char,
     String,
 
+    // Composite types
+    Tuple(Vec<Type>),                     // (T1, T2, T3, ...)
+
     // Complex types
     List(Box<Type>),                      // Vec<T>
     Array(Box<Type>, usize),              // [T; N] - fixed size
@@ -67,6 +70,7 @@ pub enum Expression {
     Float(f64),
     String(String),
     Boolean(bool),
+    Tuple(Vec<Expression>),
     List(Vec<Expression>),
     Map(Vec<(Expression, Expression)>),
     Identifier(String),

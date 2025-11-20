@@ -279,6 +279,11 @@ impl Parser {
                 self.advance();
                 Some(expr)
             }
+            Some(Token::Boolean(b)) => {
+                let expr = Expression::Boolean(*b);
+                self.advance();
+                Some(expr)
+            }
             Some(Token::Identifier(id)) if id == "Cond" => {
                 self.advance();
                 self.parse_cond_expression()
@@ -288,6 +293,7 @@ impl Parser {
                 self.advance();
                 Some(expr)
             }
+            Some(Token::LeftParen) => self.parse_tuple(),
             Some(Token::LeftBracket) => self.parse_list(),
             Some(Token::LeftBrace) => self.parse_map(),
             Some(Token::LogDebug) => {
@@ -534,6 +540,35 @@ impl Parser {
         Some(Expression::Map(map_entries))
     }
 
+    fn parse_tuple(&mut self) -> Option<Expression> {
+        // Consume left paren
+        match self.current_token {
+            Some(Token::LeftParen) => self.advance(),
+            _ => return None,
+        }
+
+        let mut elements = Vec::new();
+        while let Some(token) = &self.current_token {
+            match token {
+                Token::RightParen => break,
+                _ => {
+                    let elem = self.parse_expression()?;
+                    elements.push(elem);
+
+                    // Handle comma between elements
+                    match self.current_token {
+                        Some(Token::Comma) => self.advance(),
+                        Some(Token::RightParen) => break,
+                        _ => return None,
+                    }
+                }
+            }
+        }
+        self.advance(); // Consume right paren
+
+        Some(Expression::Tuple(elements))
+    }
+
     fn parse_list(&mut self) -> Option<Expression> {
         // Consume left bracket
         match self.current_token {
@@ -625,12 +660,29 @@ impl Parser {
         }
     }
 
-    /// Parse generic type syntax like List[Int32], Array[Int32, 10], Map[String, Int32]
+    /// Parse generic type syntax like List[Int32], Array[Int32, 10], Map[String, Int32], Tuple[Int32, String, Bool]
     fn parse_generic_type(&mut self, type_name: &str) -> Option<Type> {
         // Consume the left bracket
         self.advance();
 
         match type_name {
+            "Tuple" => {
+                // Tuple[T1, T2, T3, ...]
+                let mut types = Vec::new();
+                loop {
+                    match &self.current_token {
+                        Some(Token::RightBracket) => break,
+                        Some(Token::Comma) => {
+                            self.advance();
+                        }
+                        _ => {
+                            types.push(self.parse_type()?);
+                        }
+                    }
+                }
+                self.expect_token(Token::RightBracket)?;
+                Some(Type::Tuple(types))
+            }
             "List" => {
                 let inner = Box::new(self.parse_type()?);
                 self.expect_token(Token::RightBracket)?;

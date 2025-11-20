@@ -177,6 +177,18 @@ impl RustCodeGenerator {
             Type::Char => "char".to_string(),
             Type::String => "String".to_string(),
 
+            // Composite types
+            Type::Tuple(types) => {
+                if types.is_empty() {
+                    "()".to_string()
+                } else {
+                    let type_strs: Vec<String> = types.iter()
+                        .map(|t| self.type_to_rust(t))
+                        .collect();
+                    format!("({})", type_strs.join(", "))
+                }
+            }
+
             // Complex types
             Type::List(inner) => format!("Vec<{}>", self.type_to_rust(inner)),
             Type::Array(inner, size) => format!("[{}; {}]", self.type_to_rust(inner), size),
@@ -220,6 +232,16 @@ impl RustCodeGenerator {
             Expression::Float(_) => "f64".to_string(),
             Expression::String(_) => "String".to_string(),
             Expression::Boolean(_) => "bool".to_string(),
+            Expression::Tuple(elements) => {
+                if elements.is_empty() {
+                    "()".to_string()
+                } else {
+                    let element_types: Vec<String> = elements.iter()
+                        .map(|e| self.infer_return_type(e, parameters))
+                        .collect();
+                    format!("({})", element_types.join(", "))
+                }
+            }
             Expression::List(_) => "Vec<i32>".to_string(), // Simplified
             Expression::Map(_) => "HashMap<String, String>".to_string(), // Simplified
             Expression::Identifier(name) => {
@@ -282,7 +304,7 @@ impl RustCodeGenerator {
                                 .map(|arg| {
                                     // Use {:?} for complex types that don't implement Display
                                     match arg {
-                                        Expression::List(_) | Expression::Map(_) => "{:?}".to_string(),
+                                        Expression::List(_) | Expression::Map(_) | Expression::Tuple(_) => "{:?}".to_string(),
                                         _ => "{}".to_string(),
                                     }
                                 })
@@ -335,6 +357,28 @@ impl RustCodeGenerator {
                 Ok(to_snake_case(name))
             }
 
+            Expression::Tuple(elements) => {
+                // Generate tuple: (elem1, elem2, ...)
+                if elements.is_empty() {
+                    // Unit type
+                    Ok("()".to_string())
+                } else {
+                    let mut result = String::from("(");
+                    for (i, elem) in elements.iter().enumerate() {
+                        if i > 0 {
+                            result.push_str(", ");
+                        }
+                        result.push_str(&self.generate_expression_value(elem)?);
+                    }
+                    // Add trailing comma for single-element tuples (Rust requirement)
+                    if elements.len() == 1 {
+                        result.push(',');
+                    }
+                    result.push(')');
+                    Ok(result)
+                }
+            }
+
             Expression::List(elements) => {
                 // Generate vec![...]
                 let mut result = String::from("vec![");
@@ -377,7 +421,8 @@ impl RustCodeGenerator {
                     Operator::Divide => Ok(format!("({} / {})", left_val, right_val)),
                     Operator::Power => {
                         // Use pow for integer exponentiation
-                        Ok(format!("({}.pow({} as u32))", left_val, right_val))
+                        // Add type suffix to avoid ambiguity
+                        Ok(format!("(({} as i32).pow({} as u32))", left_val, right_val))
                     }
                     Operator::Equals => Ok(format!("({} == {})", left_val, right_val)),
                     Operator::NotEquals => Ok(format!("({} != {})", left_val, right_val)),
@@ -391,6 +436,26 @@ impl RustCodeGenerator {
                     Expression::Identifier(name) => {
                         // Check for built-in functions
                         match name.as_str() {
+                            "Tuple" => {
+                                // Generate tuple from explicit Tuple[...] constructor
+                                if arguments.is_empty() {
+                                    Ok("()".to_string())
+                                } else {
+                                    let mut result = String::from("(");
+                                    for (i, arg) in arguments.iter().enumerate() {
+                                        if i > 0 {
+                                            result.push_str(", ");
+                                        }
+                                        result.push_str(&self.generate_expression_value(arg)?);
+                                    }
+                                    // Add trailing comma for single-element tuples
+                                    if arguments.len() == 1 {
+                                        result.push(',');
+                                    }
+                                    result.push(')');
+                                    Ok(result)
+                                }
+                            }
                             "Print" => {
                                 // Print returns (), so we generate a block
                                 let mut result = String::from("{\n");
@@ -401,7 +466,7 @@ impl RustCodeGenerator {
                                     let format_parts: Vec<String> = arguments.iter()
                                         .map(|arg| {
                                             match arg {
-                                                Expression::List(_) | Expression::Map(_) => "{:?}".to_string(),
+                                                Expression::List(_) | Expression::Map(_) | Expression::Tuple(_) => "{:?}".to_string(),
                                                 _ => "{}".to_string(),
                                             }
                                         })
