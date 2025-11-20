@@ -111,6 +111,73 @@ Ok[value]                        # Success case
 Err[error]                       # Error case
 ```
 
+### Pattern Matching
+```
+(* Match expression - destructure and match values *)
+Match[value,
+  [pattern1, result1],
+  [pattern2, result2],
+  [pattern3, result3]
+]
+
+(* Wildcard pattern - matches anything *)
+Match[x, [_, "default"]]
+
+(* Literal patterns *)
+Match[5,
+  [1, "one"],
+  [2, "two"],
+  [_, "other"]
+]
+
+(* Variable binding *)
+Match[100, [x, x]]               # Binds value to x
+
+(* Option patterns *)
+Match[Some[42],
+  [Some[x], x],
+  [None, 0]
+]
+
+(* Tuple patterns *)
+Match[(1, 2),
+  [(x, y), x]                    # Destructure tuple
+]
+
+(* Nested patterns *)
+Match[Some[(42, "answer")],
+  [Some[(num, str)], num],
+  [None, 0]
+]
+```
+
+### Closures and Higher-Order Functions
+```
+(* Lambda/Anonymous function syntax *)
+Function[{x}, x * 2]             # Single parameter
+Function[{x, y}, x + y]          # Multiple parameters
+Function[{x: Int32}, x * x]      # With type annotation
+
+(* Map - transform each element *)
+Map[Function[{x}, x * 2], [1, 2, 3]]
+(* Result: [2, 4, 6] *)
+
+(* Filter - select elements *)
+Filter[Function[{x}, x > 5], [1, 10, 3, 8]]
+(* Result: [10, 8] *)
+
+(* Fold - reduce to single value *)
+Fold[Function[{acc, x}, acc + x], 0, [1, 2, 3, 4, 5]]
+(* Result: 15 *)
+
+(* Nested operations *)
+Map[
+  Function[{x}, x * 2],
+  Filter[Function[{x}, x > 2], [1, 2, 3, 4, 5]]
+]
+(* Result: [6, 8, 10] *)
+```
+
 ### Type System
 
 W supports a comprehensive type system that maps directly to Rust types:
