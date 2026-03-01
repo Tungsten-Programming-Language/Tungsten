@@ -154,7 +154,25 @@ impl Parser {
         }
 
         // Try binary operations
-        self.parse_binary_operation()
+        let expr = self.parse_binary_operation()?;
+
+        // Check for arrow lambda shorthand: x -> body
+        // Desugars: x -> body  →  Function[{x}, body]
+        if let Expression::Identifier(param_name) = &expr {
+            if matches!(&self.current_token, Some(Token::Arrow)) {
+                self.advance(); // consume ->
+                let body = Box::new(self.parse_base_expression()?);
+                return Some(Expression::Lambda {
+                    parameters: vec![TypeAnnotation {
+                        name: param_name.clone(),
+                        type_: Type::Int32, // Placeholder - will be inferred
+                    }],
+                    body,
+                });
+            }
+        }
+
+        Some(expr)
     }
 
     /// Parse either a function definition or function call
