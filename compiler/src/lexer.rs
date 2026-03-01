@@ -68,6 +68,9 @@ pub enum Token {
     /// Greater than comparison `>`
     GreaterThan,
 
+    /// Pipe operator `|>`
+    Pipe,
+
     /// Logging level tokens for different verbosity levels
     LogDebug,   // Debug log level
     LogInfo,    // Info log level
@@ -255,6 +258,17 @@ impl Lexer {
             '>' => {
                 self.position += 1;
                 Some(Token::GreaterThan)
+            }
+            '|' => {
+                self.position += 1;
+                // Check for |>
+                if self.position < self.input.len() && self.input[self.position] == '>' {
+                    self.position += 1;
+                    Some(Token::Pipe)
+                } else {
+                    // Single | is not a token in this language
+                    None
+                }
             }
             '_' => {
                 self.position += 1;

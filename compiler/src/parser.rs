@@ -81,6 +81,37 @@ impl Parser {
     /// # Returns
     /// An optional Expression representing the parsed input, or None if parsing fails
     pub fn parse_expression(&mut self) -> Option<Expression> {
+        let mut expr = self.parse_base_expression()?;
+
+        // Check for pipe operator |> (lowest precedence, left-associative)
+        while matches!(&self.current_token, Some(Token::Pipe)) {
+            self.advance();
+
+            // Parse the RHS — must be a function call or bare identifier
+            let rhs = self.parse_base_expression()?;
+
+            // Desugar: insert LHS as last argument of RHS function call
+            expr = match rhs {
+                Expression::FunctionCall { function, mut arguments } => {
+                    arguments.push(expr);
+                    Expression::FunctionCall { function, arguments }
+                }
+                Expression::Identifier(name) => {
+                    Expression::FunctionCall {
+                        function: Box::new(Expression::Identifier(name)),
+                        arguments: vec![expr],
+                    }
+                }
+                _ => return None, // Pipe RHS must be a function call or identifier
+            };
+        }
+
+        Some(expr)
+    }
+
+    /// Parses a single expression without pipe operator handling.
+    /// Pipe handling is in `parse_expression` which wraps this method.
+    fn parse_base_expression(&mut self) -> Option<Expression> {
         // Check if this might be a function (call or definition)
         // by looking for Identifier followed by [
         if let Some(Token::Identifier(id)) = &self.current_token {
