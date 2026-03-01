@@ -71,6 +71,9 @@ pub enum Token {
     /// Pipe operator `|>`
     Pipe,
 
+    /// Arrow operator `->` for lambda shorthand
+    Arrow,
+
     /// Logging level tokens for different verbosity levels
     LogDebug,   // Debug log level
     LogInfo,    // Info log level
@@ -215,7 +218,13 @@ impl Lexer {
             }
             '-' => {
                 self.position += 1;
-                Some(Token::Minus)
+                // Check for ->
+                if self.position < self.input.len() && self.input[self.position] == '>' {
+                    self.position += 1;
+                    Some(Token::Arrow)
+                } else {
+                    Some(Token::Minus)
+                }
             }
             '*' => {
                 self.position += 1;
