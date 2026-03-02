@@ -145,6 +145,12 @@ pub enum Expression {
         error: Box<Expression>,
     },
 
+    /// Error propagation operator `?`
+    /// Unwraps Result/Option, returning early on Err/None
+    Propagate {
+        expr: Box<Expression>,
+    },
+
     /// Pattern matching expression
     /// Structure: Match[value, [pattern1, result1], [pattern2, result2], ...]
     Match {

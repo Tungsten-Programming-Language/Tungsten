@@ -46,6 +46,8 @@ impl TypeChecker {
                 self.check(message)?;
                 Ok(Type::Int) // Placeholder, could be a specific "Void" type
             }
+            Expression::Propagate { expr } => self.check(expr),
+            _ => Ok(Type::Int), // Placeholder for unhandled expression types
         }
     }
 
