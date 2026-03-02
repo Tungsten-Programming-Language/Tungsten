@@ -90,8 +90,14 @@ impl Parser {
             // Parse the RHS — must be a function call or bare identifier
             let rhs = self.parse_base_expression()?;
 
+            // Unwrap Propagate on RHS for pipe desugaring, then re-wrap
+            let (inner_rhs, propagate) = match rhs {
+                Expression::Propagate { expr: inner } => (*inner, true),
+                other => (other, false),
+            };
+
             // Desugar: insert LHS as last argument of RHS function call
-            expr = match rhs {
+            expr = match inner_rhs {
                 Expression::FunctionCall { function, mut arguments } => {
                     arguments.push(expr);
                     Expression::FunctionCall { function, arguments }
@@ -104,6 +110,11 @@ impl Parser {
                 }
                 _ => return None, // Pipe RHS must be a function call or identifier
             };
+
+            // Re-wrap in Propagate if RHS had ? operator
+            if propagate {
+                expr = Expression::Propagate { expr: Box::new(expr) };
+            }
         }
 
         Some(expr)
@@ -148,7 +159,13 @@ impl Parser {
             if is_function_syntax {
                 // Try to parse as function call or definition
                 if let Some(func_or_call) = self.parse_function_or_call() {
-                    return Some(func_or_call);
+                    // Handle postfix ? on function call result
+                    let mut result = func_or_call;
+                    while matches!(&self.current_token, Some(Token::Question)) {
+                        self.advance();
+                        result = Expression::Propagate { expr: Box::new(result) };
+                    }
+                    return Some(result);
                 }
             }
         }
@@ -289,6 +306,12 @@ impl Parser {
     fn parse_binary_operation(&mut self) -> Option<Expression> {
         let mut left = self.parse_primary()?;
 
+        // Handle postfix ? operator (highest precedence, binds before binary ops)
+        while matches!(&self.current_token, Some(Token::Question)) {
+            self.advance();
+            left = Expression::Propagate { expr: Box::new(left) };
+        }
+
         while let Some(token) = &self.current_token {
             let operator = match token {
                 Token::Plus => Operator::Add,
@@ -304,7 +327,13 @@ impl Parser {
             };
 
             self.advance();
-            let right = self.parse_primary()?;
+            let mut right = self.parse_primary()?;
+
+            // Handle postfix ? on right operand
+            while matches!(&self.current_token, Some(Token::Question)) {
+                self.advance();
+                right = Expression::Propagate { expr: Box::new(right) };
+            }
 
             left = Expression::BinaryOp {
                 left: Box::new(left),

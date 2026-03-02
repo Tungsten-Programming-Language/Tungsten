@@ -444,6 +444,20 @@ impl TypeInference {
                 Ok(result_type.unwrap_or(Type::Tuple(vec![])))
             }
 
+            // Error propagation operator ?
+            Expression::Propagate { expr } => {
+                let inner_type = self.infer_expression(expr)?;
+                match inner_type {
+                    Type::Option(inner) => Ok(*inner),
+                    Type::Result(ok_type, _) => Ok(*ok_type),
+                    _ => Err(TypeError::TypeMismatch {
+                        expected: Type::Option(Box::new(Type::Int32)),
+                        actual: inner_type,
+                        context: "? operator requires Option or Result type".to_string(),
+                    }),
+                }
+            }
+
             // Not yet implemented
             Expression::Program(_) => Err(TypeError::CannotInfer("program".to_string())),
             Expression::Lambda { .. } => Err(TypeError::CannotInfer("lambda".to_string())),

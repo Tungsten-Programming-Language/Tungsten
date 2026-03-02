@@ -74,6 +74,9 @@ pub enum Token {
     /// Arrow operator `->` for lambda shorthand
     Arrow,
 
+    /// Question mark `?` for error propagation
+    Question,
+
     /// Logging level tokens for different verbosity levels
     LogDebug,   // Debug log level
     LogInfo,    // Info log level
@@ -278,6 +281,10 @@ impl Lexer {
                     // Single | is not a token in this language
                     None
                 }
+            }
+            '?' => {
+                self.position += 1;
+                Some(Token::Question)
             }
             '_' => {
                 self.position += 1;

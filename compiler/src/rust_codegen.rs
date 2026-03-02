@@ -330,6 +330,10 @@ impl RustCodeGenerator {
                 let err_type = self.infer_return_type(error, parameters);
                 format!("Result<(), {}>", err_type)  // Ok type needs context
             }
+            Expression::Propagate { expr } => {
+                // ? unwraps the inner type
+                self.infer_return_type(expr, parameters)
+            }
             _ => "()".to_string(),
         }
     }
@@ -780,6 +784,11 @@ impl RustCodeGenerator {
             Expression::StructDefinition { .. } => {
                 // Struct definitions should not appear in expression contexts
                 Err(std::fmt::Error)
+            }
+
+            Expression::Propagate { expr } => {
+                let inner = self.generate_expression_value(expr)?;
+                Ok(format!("({})?", inner))
             }
 
             Expression::StructInstantiation { struct_name, field_values } => {
