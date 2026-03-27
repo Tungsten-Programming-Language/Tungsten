@@ -16,7 +16,7 @@ pub enum Type {
     Int32,
     Int64,
     Int128,
-    Int,  // isize
+    Int, // isize
 
     // Unsigned integers
     UInt8,
@@ -24,7 +24,7 @@ pub enum Type {
     UInt32,
     UInt64,
     UInt128,
-    UInt,  // usize
+    UInt, // usize
 
     // Floating point
     Float32,
@@ -36,27 +36,27 @@ pub enum Type {
     String,
 
     // Composite types
-    Tuple(Vec<Type>),                     // (T1, T2, T3, ...)
+    Tuple(Vec<Type>), // (T1, T2, T3, ...)
 
     // Complex types
-    List(Box<Type>),                      // Vec<T>
-    Array(Box<Type>, usize),              // [T; N] - fixed size
-    Slice(Box<Type>),                     // &[T]
-    Map(Box<Type>, Box<Type>),            // HashMap<K, V>
-    HashSet(Box<Type>),                   // HashSet<T>
-    BTreeMap(Box<Type>, Box<Type>),       // BTreeMap<K, V>
-    BTreeSet(Box<Type>),                  // BTreeSet<T>
+    List(Box<Type>),                // Vec<T>
+    Array(Box<Type>, usize),        // [T; N] - fixed size
+    Slice(Box<Type>),               // &[T]
+    Map(Box<Type>, Box<Type>),      // HashMap<K, V>
+    HashSet(Box<Type>),             // HashSet<T>
+    BTreeMap(Box<Type>, Box<Type>), // BTreeMap<K, V>
+    BTreeSet(Box<Type>),            // BTreeSet<T>
     Function(Vec<Type>, Box<Type>),
 
     // Error handling types (crucial for Rust's safety model)
-    Option(Box<Type>),                    // Option<T>
-    Result(Box<Type>, Box<Type>),         // Result<T, E>
+    Option(Box<Type>),            // Option<T>
+    Result(Box<Type>, Box<Type>), // Result<T, E>
 
     // Special types
     LogLevel,
 
     // User-defined types
-    Custom(String),                       // Custom struct types
+    Custom(String), // Custom struct types
 }
 
 /// Represents patterns for pattern matching
@@ -90,7 +90,7 @@ pub struct TypeAnnotation {
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
-    Number(i32),  // Default to i32 like Rust
+    Number(i32), // Default to i32 like Rust
     Float(f64),
     String(String),
     Boolean(bool),
@@ -107,7 +107,7 @@ pub enum Expression {
         parameters: Vec<TypeAnnotation>,
         body: Box<Expression>,
     },
-    Program(Vec<Expression>),  // Multiple top-level expressions
+    Program(Vec<Expression>), // Multiple top-level expressions
     BinaryOp {
         left: Box<Expression>,
         operator: Operator,
@@ -179,6 +179,15 @@ pub enum Expression {
     StructInstantiation {
         struct_name: String,
         field_values: Vec<Expression>,
+    },
+
+    /// With expression - local immutable bindings
+    /// Structure: With[{x = expr1, y = expr2, ...}, body]
+    /// Bindings are sequential (later bindings can reference earlier ones)
+    /// Transpiles to Rust block expression: { let x = expr1; let y = expr2; body }
+    With {
+        bindings: Vec<(String, Expression)>,
+        body: Box<Expression>,
     },
 }
 

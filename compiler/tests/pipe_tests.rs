@@ -1,5 +1,5 @@
-use w::lexer::{Lexer, Token};
 use w::ast::{Expression, Operator};
+use w::lexer::{Lexer, Token};
 use w::parser::Parser;
 
 // ── Lexer tests ──
@@ -36,7 +36,10 @@ fn test_pipe_simple() {
     let expr = parser.parse().unwrap();
 
     match expr {
-        Expression::FunctionCall { function, arguments } => {
+        Expression::FunctionCall {
+            function,
+            arguments,
+        } => {
             assert_eq!(*function, Expression::Identifier("F".to_string()));
             assert_eq!(arguments.len(), 2);
             assert_eq!(arguments[0], Expression::Identifier("y".to_string()));
@@ -53,7 +56,10 @@ fn test_pipe_bare_function() {
     let expr = parser.parse().unwrap();
 
     match expr {
-        Expression::FunctionCall { function, arguments } => {
+        Expression::FunctionCall {
+            function,
+            arguments,
+        } => {
             assert_eq!(*function, Expression::Identifier("F".to_string()));
             assert_eq!(arguments.len(), 1);
             assert_eq!(arguments[0], Expression::Identifier("x".to_string()));
@@ -69,13 +75,19 @@ fn test_pipe_chained() {
     let expr = parser.parse().unwrap();
 
     match expr {
-        Expression::FunctionCall { function, arguments } => {
+        Expression::FunctionCall {
+            function,
+            arguments,
+        } => {
             assert_eq!(*function, Expression::Identifier("G".to_string()));
             assert_eq!(arguments.len(), 2);
             assert_eq!(arguments[0], Expression::Identifier("z".to_string()));
             // Second argument should be F[y, x]
             match &arguments[1] {
-                Expression::FunctionCall { function: inner_fn, arguments: inner_args } => {
+                Expression::FunctionCall {
+                    function: inner_fn,
+                    arguments: inner_args,
+                } => {
                     assert_eq!(**inner_fn, Expression::Identifier("F".to_string()));
                     assert_eq!(inner_args.len(), 2);
                     assert_eq!(inner_args[0], Expression::Identifier("y".to_string()));
@@ -95,11 +107,18 @@ fn test_pipe_with_binary_op_lhs() {
     let expr = parser.parse().unwrap();
 
     match expr {
-        Expression::FunctionCall { function, arguments } => {
+        Expression::FunctionCall {
+            function,
+            arguments,
+        } => {
             assert_eq!(*function, Expression::Identifier("F".to_string()));
             assert_eq!(arguments.len(), 1);
             match &arguments[0] {
-                Expression::BinaryOp { left, operator, right } => {
+                Expression::BinaryOp {
+                    left,
+                    operator,
+                    right,
+                } => {
                     assert_eq!(**left, Expression::Number(1));
                     assert_eq!(*operator, Operator::Add);
                     assert_eq!(**right, Expression::Number(2));
@@ -119,17 +138,26 @@ fn test_pipe_chained_bare_functions() {
 
     // Outermost: H[...]
     match expr {
-        Expression::FunctionCall { function, arguments } => {
+        Expression::FunctionCall {
+            function,
+            arguments,
+        } => {
             assert_eq!(*function, Expression::Identifier("H".to_string()));
             assert_eq!(arguments.len(), 1);
             // G[...]
             match &arguments[0] {
-                Expression::FunctionCall { function: g_fn, arguments: g_args } => {
+                Expression::FunctionCall {
+                    function: g_fn,
+                    arguments: g_args,
+                } => {
                     assert_eq!(**g_fn, Expression::Identifier("G".to_string()));
                     assert_eq!(g_args.len(), 1);
                     // F[x]
                     match &g_args[0] {
-                        Expression::FunctionCall { function: f_fn, arguments: f_args } => {
+                        Expression::FunctionCall {
+                            function: f_fn,
+                            arguments: f_args,
+                        } => {
                             assert_eq!(**f_fn, Expression::Identifier("F".to_string()));
                             assert_eq!(f_args.len(), 1);
                             assert_eq!(f_args[0], Expression::Identifier("x".to_string()));

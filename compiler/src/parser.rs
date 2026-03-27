@@ -1,13 +1,13 @@
 //! # W Language Parser
-//! 
+//!
 //! This parser is responsible for converting a stream of tokens into an Abstract Syntax Tree (AST).
-//! It implements a recursive descent parsing strategy, supporting various language constructs 
+//! It implements a recursive descent parsing strategy, supporting various language constructs
 //! such as function calls, binary operations, log statements, lists, maps, and more.
-//! 
+//!
 //! The parser works closely with the lexer to transform source code into a structured representation
 //! that can be further processed by other compiler stages like type checking or code generation.
 
-use crate::ast::{Expression, Operator, Type, TypeAnnotation, LogLevel, Pattern};
+use crate::ast::{Expression, LogLevel, Operator, Pattern, Type, TypeAnnotation};
 use crate::lexer::{Lexer, Token};
 
 /// Helper enum to distinguish between function arguments and parameters during parsing
@@ -17,7 +17,7 @@ enum ArgumentOrParameter {
 }
 
 /// Represents the parser state, holding a lexer and the current token being processed.
-/// 
+///
 /// The parser maintains the context needed to parse a sequence of tokens into an Abstract Syntax Tree.
 pub struct Parser {
     /// The lexer that provides a stream of tokens
@@ -28,10 +28,10 @@ pub struct Parser {
 
 impl Parser {
     /// Creates a new Parser instance from an input string.
-    /// 
+    ///
     /// # Arguments
     /// * `input` - The source code to be parsed
-    /// 
+    ///
     /// # Returns
     /// A new Parser with the first token loaded
     pub fn new(input: String) -> Self {
@@ -72,12 +72,12 @@ impl Parser {
     }
 
     /// Attempts to parse a general expression, trying different expression types.
-    /// 
+    ///
     /// This method tries parsing expressions in a specific order:
     /// 1. Function definitions
     /// 2. Function calls
     /// 3. Binary operations
-    /// 
+    ///
     /// # Returns
     /// An optional Expression representing the parsed input, or None if parsing fails
     pub fn parse_expression(&mut self) -> Option<Expression> {
@@ -98,22 +98,28 @@ impl Parser {
 
             // Desugar: insert LHS as last argument of RHS function call
             expr = match inner_rhs {
-                Expression::FunctionCall { function, mut arguments } => {
+                Expression::FunctionCall {
+                    function,
+                    mut arguments,
+                } => {
                     arguments.push(expr);
-                    Expression::FunctionCall { function, arguments }
-                }
-                Expression::Identifier(name) => {
                     Expression::FunctionCall {
-                        function: Box::new(Expression::Identifier(name)),
-                        arguments: vec![expr],
+                        function,
+                        arguments,
                     }
                 }
+                Expression::Identifier(name) => Expression::FunctionCall {
+                    function: Box::new(Expression::Identifier(name)),
+                    arguments: vec![expr],
+                },
                 _ => return None, // Pipe RHS must be a function call or identifier
             };
 
             // Re-wrap in Propagate if RHS had ? operator
             if propagate {
-                expr = Expression::Propagate { expr: Box::new(expr) };
+                expr = Expression::Propagate {
+                    expr: Box::new(expr),
+                };
             }
         }
 
@@ -126,6 +132,12 @@ impl Parser {
         // Check if this might be a function (call or definition)
         // by looking for Identifier followed by [
         if let Some(Token::Identifier(id)) = &self.current_token {
+            // Special handling for With - local bindings expression
+            if id == "With" {
+                self.advance();
+                return self.parse_with_expression();
+            }
+
             // Special handling for Cond - don't treat it as a regular function call
             if id == "Cond" {
                 self.advance();
@@ -152,7 +164,9 @@ impl Parser {
 
             // Peek ahead to check if next token is LeftBracket
             // We need to check this to avoid consuming tokens unnecessarily
-            let is_function_syntax = self.lexer.peek_token()
+            let is_function_syntax = self
+                .lexer
+                .peek_token()
                 .map(|t| matches!(t, Token::LeftBracket))
                 .unwrap_or(false);
 
@@ -163,7 +177,9 @@ impl Parser {
                     let mut result = func_or_call;
                     while matches!(&self.current_token, Some(Token::Question)) {
                         self.advance();
-                        result = Expression::Propagate { expr: Box::new(result) };
+                        result = Expression::Propagate {
+                            expr: Box::new(result),
+                        };
                     }
                     return Some(result);
                 }
@@ -237,7 +253,8 @@ impl Parser {
                 self.advance();
 
                 // Convert items to parameters
-                let parameters: Vec<TypeAnnotation> = items.into_iter()
+                let parameters: Vec<TypeAnnotation> = items
+                    .into_iter()
                     .filter_map(|item| {
                         if let ArgumentOrParameter::Parameter(p) = item {
                             Some(p)
@@ -258,12 +275,11 @@ impl Parser {
             }
             _ => {
                 // It's a function call
-                let arguments: Vec<Expression> = items.into_iter()
-                    .filter_map(|item| {
-                        match item {
-                            ArgumentOrParameter::Expression(e) => Some(e),
-                            ArgumentOrParameter::Parameter(_) => None,
-                        }
+                let arguments: Vec<Expression> = items
+                    .into_iter()
+                    .filter_map(|item| match item {
+                        ArgumentOrParameter::Expression(e) => Some(e),
+                        ArgumentOrParameter::Parameter(_) => None,
                     })
                     .collect();
 
@@ -279,7 +295,9 @@ impl Parser {
         // Try to parse as parameter (identifier with optional type)
         if let Some(Token::Identifier(name)) = &self.current_token {
             // Peek ahead to see if this is a type annotation
-            let next_is_colon = self.lexer.peek_token()
+            let next_is_colon = self
+                .lexer
+                .peek_token()
                 .map(|t| matches!(t, Token::Colon))
                 .unwrap_or(false);
 
@@ -302,14 +320,15 @@ impl Parser {
         self.parse_expression().map(ArgumentOrParameter::Expression)
     }
 
-
     fn parse_binary_operation(&mut self) -> Option<Expression> {
         let mut left = self.parse_primary()?;
 
         // Handle postfix ? operator (highest precedence, binds before binary ops)
         while matches!(&self.current_token, Some(Token::Question)) {
             self.advance();
-            left = Expression::Propagate { expr: Box::new(left) };
+            left = Expression::Propagate {
+                expr: Box::new(left),
+            };
         }
 
         while let Some(token) = &self.current_token {
@@ -332,7 +351,9 @@ impl Parser {
             // Handle postfix ? on right operand
             while matches!(&self.current_token, Some(Token::Question)) {
                 self.advance();
-                right = Expression::Propagate { expr: Box::new(right) };
+                right = Expression::Propagate {
+                    expr: Box::new(right),
+                };
             }
 
             left = Expression::BinaryOp {
@@ -346,7 +367,7 @@ impl Parser {
     }
 
     /// Parses a primary expression, which includes basic types, lists, maps, and log calls.
-    /// 
+    ///
     /// This method handles parsing of:
     /// - Numbers (integer and float)
     /// - Strings
@@ -354,7 +375,7 @@ impl Parser {
     /// - Lists
     /// - Maps
     /// - Log calls (Debug, Info, Warn, Error)
-    /// 
+    ///
     /// # Returns
     /// - `Some(Expression)` if a valid primary expression is found
     /// - `None` if no valid primary expression can be parsed
@@ -431,7 +452,7 @@ impl Parser {
 
     /// Parses a Cond expression with the structure:
     /// Cond[[condition1 statements1] [condition2 statements2] ... [default_statements]]
-    /// 
+    ///
     /// # Returns
     /// - `Some(Expression::Cond)` if parsing succeeds
     /// - `None` if parsing fails
@@ -723,6 +744,80 @@ impl Parser {
         })
     }
 
+    /// Parses a With expression with the structure:
+    /// With[{binding1 = expr1, binding2 = expr2, ...}, body]
+    ///
+    /// # Returns
+    /// - `Some(Expression::With)` if parsing succeeds
+    /// - `None` if parsing fails
+    fn parse_with_expression(&mut self) -> Option<Expression> {
+        // Expect left bracket for With
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Expect left brace for bindings
+        match self.current_token {
+            Some(Token::LeftBrace) => self.advance(),
+            _ => return None,
+        }
+
+        let mut bindings = Vec::new();
+
+        // Parse bindings: name = expr, name = expr, ...
+        while let Some(token) = &self.current_token {
+            match token {
+                Token::RightBrace => break,
+                Token::Identifier(name) => {
+                    let binding_name = name.clone();
+                    self.advance();
+
+                    // Expect '=' for binding
+                    match self.current_token {
+                        Some(Token::Assign) => self.advance(),
+                        _ => return None,
+                    }
+
+                    // Parse binding expression
+                    let binding_expr = self.parse_expression()?;
+                    bindings.push((binding_name, binding_expr));
+
+                    // Handle comma between bindings
+                    if matches!(self.current_token, Some(Token::Comma)) {
+                        self.advance();
+                    } else if !matches!(self.current_token, Some(Token::RightBrace)) {
+                        return None;
+                    }
+                }
+                _ => return None,
+            }
+        }
+
+        // Consume right brace
+        match self.current_token {
+            Some(Token::RightBrace) => self.advance(),
+            _ => return None,
+        }
+
+        // Expect comma after bindings
+        match self.current_token {
+            Some(Token::Comma) => self.advance(),
+            _ => return None,
+        }
+
+        // Parse body expression
+        let body = Box::new(self.parse_expression()?);
+
+        // Consume right bracket of With
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::With { bindings, body })
+    }
+
     /// Parses a pattern for use in Match expressions
     ///
     /// # Pattern Types
@@ -936,10 +1031,7 @@ impl Parser {
             _ => return None,
         }
 
-        Some(Expression::LogCall {
-            level,
-            message,
-        })
+        Some(Expression::LogCall { level, message })
     }
 
     /// Parses a Some expression with the structure: Some[value]
@@ -1275,7 +1367,7 @@ impl Parser {
     }
 
     /// Advances the parser to the next token in the input stream.
-    /// 
+    ///
     /// This method updates the current_token by requesting the next token from the lexer.
     /// It is typically called after processing the current token to move parsing forward.
     fn advance(&mut self) {

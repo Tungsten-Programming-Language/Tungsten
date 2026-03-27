@@ -1,6 +1,6 @@
+use w::ast::Expression;
 use w::lexer::{Lexer, Token};
 use w::parser::Parser;
-use w::ast::Expression;
 use w::rust_codegen::RustCodeGenerator;
 
 // ==================== Lexer Tests ====================
@@ -46,12 +46,10 @@ fn test_parse_simple_propagate() {
     let expr = parser.parse_expression().unwrap();
 
     match expr {
-        Expression::Propagate { expr } => {
-            match *expr {
-                Expression::Identifier(name) => assert_eq!(name, "x"),
-                other => panic!("Expected Identifier, got {:?}", other),
-            }
-        }
+        Expression::Propagate { expr } => match *expr {
+            Expression::Identifier(name) => assert_eq!(name, "x"),
+            other => panic!("Expected Identifier, got {:?}", other),
+        },
         other => panic!("Expected Propagate, got {:?}", other),
     }
 }
@@ -62,18 +60,19 @@ fn test_parse_function_call_propagate() {
     let expr = parser.parse_expression().unwrap();
 
     match expr {
-        Expression::Propagate { expr } => {
-            match *expr {
-                Expression::FunctionCall { function, arguments } => {
-                    match *function {
-                        Expression::Identifier(name) => assert_eq!(name, "F"),
-                        other => panic!("Expected Identifier, got {:?}", other),
-                    }
-                    assert_eq!(arguments.len(), 1);
+        Expression::Propagate { expr } => match *expr {
+            Expression::FunctionCall {
+                function,
+                arguments,
+            } => {
+                match *function {
+                    Expression::Identifier(name) => assert_eq!(name, "F"),
+                    other => panic!("Expected Identifier, got {:?}", other),
                 }
-                other => panic!("Expected FunctionCall, got {:?}", other),
+                assert_eq!(arguments.len(), 1);
             }
-        }
+            other => panic!("Expected FunctionCall, got {:?}", other),
+        },
         other => panic!("Expected Propagate, got {:?}", other),
     }
 }
@@ -85,18 +84,20 @@ fn test_parse_propagate_binds_tighter_than_binary_op() {
     let expr = parser.parse_expression().unwrap();
 
     match expr {
-        Expression::BinaryOp { left, operator: _, right } => {
+        Expression::BinaryOp {
+            left,
+            operator: _,
+            right,
+        } => {
             match *left {
-                Expression::Number(1) => {},
+                Expression::Number(1) => {}
                 other => panic!("Expected Number(1), got {:?}", other),
             }
             match *right {
-                Expression::Propagate { expr } => {
-                    match *expr {
-                        Expression::Identifier(name) => assert_eq!(name, "x"),
-                        other => panic!("Expected Identifier, got {:?}", other),
-                    }
-                }
+                Expression::Propagate { expr } => match *expr {
+                    Expression::Identifier(name) => assert_eq!(name, "x"),
+                    other => panic!("Expected Identifier, got {:?}", other),
+                },
                 other => panic!("Expected Propagate, got {:?}", other),
             }
         }
@@ -111,22 +112,23 @@ fn test_parse_propagate_with_pipe() {
     let expr = parser.parse_expression().unwrap();
 
     match expr {
-        Expression::Propagate { expr } => {
-            match *expr {
-                Expression::FunctionCall { function, arguments } => {
-                    match *function {
-                        Expression::Identifier(name) => assert_eq!(name, "F"),
-                        other => panic!("Expected Identifier(F), got {:?}", other),
-                    }
-                    assert_eq!(arguments.len(), 1);
-                    match &arguments[0] {
-                        Expression::Identifier(name) => assert_eq!(name, "x"),
-                        other => panic!("Expected Identifier(x), got {:?}", other),
-                    }
+        Expression::Propagate { expr } => match *expr {
+            Expression::FunctionCall {
+                function,
+                arguments,
+            } => {
+                match *function {
+                    Expression::Identifier(name) => assert_eq!(name, "F"),
+                    other => panic!("Expected Identifier(F), got {:?}", other),
                 }
-                other => panic!("Expected FunctionCall, got {:?}", other),
+                assert_eq!(arguments.len(), 1);
+                match &arguments[0] {
+                    Expression::Identifier(name) => assert_eq!(name, "x"),
+                    other => panic!("Expected Identifier(x), got {:?}", other),
+                }
             }
-        }
+            other => panic!("Expected FunctionCall, got {:?}", other),
+        },
         other => panic!("Expected Propagate, got {:?}", other),
     }
 }
@@ -142,7 +144,10 @@ fn test_parse_chained_pipe_with_propagate() {
     match expr {
         Expression::Propagate { expr: c_prop } => {
             match *c_prop {
-                Expression::FunctionCall { function: c_fn, arguments: c_args } => {
+                Expression::FunctionCall {
+                    function: c_fn,
+                    arguments: c_args,
+                } => {
                     match *c_fn {
                         Expression::Identifier(name) => assert_eq!(name, "C"),
                         other => panic!("Expected C, got {:?}", other),
@@ -153,7 +158,10 @@ fn test_parse_chained_pipe_with_propagate() {
                     match &c_args[0] {
                         Expression::Propagate { expr: b_prop } => {
                             match b_prop.as_ref() {
-                                Expression::FunctionCall { function: b_fn, arguments: b_args } => {
+                                Expression::FunctionCall {
+                                    function: b_fn,
+                                    arguments: b_args,
+                                } => {
                                     match b_fn.as_ref() {
                                         Expression::Identifier(name) => assert_eq!(name, "B"),
                                         other => panic!("Expected B, got {:?}", other),
@@ -164,21 +172,37 @@ fn test_parse_chained_pipe_with_propagate() {
                                     match &b_args[0] {
                                         Expression::Propagate { expr: a_prop } => {
                                             match a_prop.as_ref() {
-                                                Expression::FunctionCall { function: a_fn, arguments: a_args } => {
+                                                Expression::FunctionCall {
+                                                    function: a_fn,
+                                                    arguments: a_args,
+                                                } => {
                                                     match a_fn.as_ref() {
-                                                        Expression::Identifier(name) => assert_eq!(name, "A"),
-                                                        other => panic!("Expected A, got {:?}", other),
+                                                        Expression::Identifier(name) => {
+                                                            assert_eq!(name, "A")
+                                                        }
+                                                        other => {
+                                                            panic!("Expected A, got {:?}", other)
+                                                        }
                                                     }
                                                     assert_eq!(a_args.len(), 1);
                                                     match &a_args[0] {
-                                                        Expression::Identifier(name) => assert_eq!(name, "x"),
-                                                        other => panic!("Expected x, got {:?}", other),
+                                                        Expression::Identifier(name) => {
+                                                            assert_eq!(name, "x")
+                                                        }
+                                                        other => {
+                                                            panic!("Expected x, got {:?}", other)
+                                                        }
                                                     }
                                                 }
-                                                other => panic!("Expected FunctionCall(A), got {:?}", other),
+                                                other => panic!(
+                                                    "Expected FunctionCall(A), got {:?}",
+                                                    other
+                                                ),
                                             }
                                         }
-                                        other => panic!("Expected Propagate(A[x]), got {:?}", other),
+                                        other => {
+                                            panic!("Expected Propagate(A[x]), got {:?}", other)
+                                        }
                                     }
                                 }
                                 other => panic!("Expected FunctionCall(B), got {:?}", other),
@@ -201,26 +225,27 @@ fn test_parse_pipe_with_function_call_propagate() {
     let expr = parser.parse_expression().unwrap();
 
     match expr {
-        Expression::Propagate { expr } => {
-            match *expr {
-                Expression::FunctionCall { function, arguments } => {
-                    match *function {
-                        Expression::Identifier(name) => assert_eq!(name, "F"),
-                        other => panic!("Expected Identifier(F), got {:?}", other),
-                    }
-                    assert_eq!(arguments.len(), 2);
-                    match &arguments[0] {
-                        Expression::Identifier(name) => assert_eq!(name, "y"),
-                        other => panic!("Expected Identifier(y), got {:?}", other),
-                    }
-                    match &arguments[1] {
-                        Expression::Identifier(name) => assert_eq!(name, "x"),
-                        other => panic!("Expected Identifier(x), got {:?}", other),
-                    }
+        Expression::Propagate { expr } => match *expr {
+            Expression::FunctionCall {
+                function,
+                arguments,
+            } => {
+                match *function {
+                    Expression::Identifier(name) => assert_eq!(name, "F"),
+                    other => panic!("Expected Identifier(F), got {:?}", other),
                 }
-                other => panic!("Expected FunctionCall, got {:?}", other),
+                assert_eq!(arguments.len(), 2);
+                match &arguments[0] {
+                    Expression::Identifier(name) => assert_eq!(name, "y"),
+                    other => panic!("Expected Identifier(y), got {:?}", other),
+                }
+                match &arguments[1] {
+                    Expression::Identifier(name) => assert_eq!(name, "x"),
+                    other => panic!("Expected Identifier(x), got {:?}", other),
+                }
             }
-        }
+            other => panic!("Expected FunctionCall, got {:?}", other),
+        },
         other => panic!("Expected Propagate, got {:?}", other),
     }
 }
@@ -235,8 +260,11 @@ fn test_codegen_simple_propagate() {
     let mut codegen = RustCodeGenerator::new();
     let rust_code = codegen.generate(&expr).unwrap();
 
-    assert!(rust_code.contains("(x)?"),
-        "Should generate (x)?, got: {}", rust_code);
+    assert!(
+        rust_code.contains("(x)?"),
+        "Should generate (x)?, got: {}",
+        rust_code
+    );
 }
 
 #[test]
@@ -247,8 +275,11 @@ fn test_codegen_function_call_propagate() {
     let mut codegen = RustCodeGenerator::new();
     let rust_code = codegen.generate(&expr).unwrap();
 
-    assert!(rust_code.contains("(f(x))?"),
-        "Should generate (f(x))?, got: {}", rust_code);
+    assert!(
+        rust_code.contains("(f(x))?"),
+        "Should generate (f(x))?, got: {}",
+        rust_code
+    );
 }
 
 #[test]
@@ -259,8 +290,11 @@ fn test_codegen_propagate_with_some() {
     let mut codegen = RustCodeGenerator::new();
     let rust_code = codegen.generate(&expr).unwrap();
 
-    assert!(rust_code.contains("(Some(42))?"),
-        "Should generate (Some(42))?, got: {}", rust_code);
+    assert!(
+        rust_code.contains("(Some(42))?"),
+        "Should generate (Some(42))?, got: {}",
+        rust_code
+    );
 }
 
 #[test]
@@ -271,6 +305,9 @@ fn test_codegen_propagate_with_ok() {
     let mut codegen = RustCodeGenerator::new();
     let rust_code = codegen.generate(&expr).unwrap();
 
-    assert!(rust_code.contains("(Ok(100))?"),
-        "Should generate (Ok(100))?, got: {}", rust_code);
+    assert!(
+        rust_code.contains("(Ok(100))?"),
+        "Should generate (Ok(100))?, got: {}",
+        rust_code
+    );
 }
