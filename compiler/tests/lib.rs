@@ -4,3 +4,5 @@ pub mod parser_tests;
 pub mod pipe_tests;
 #[cfg(test)]
 pub mod propagate_tests;
+#[cfg(test)]
+pub mod with_tests;

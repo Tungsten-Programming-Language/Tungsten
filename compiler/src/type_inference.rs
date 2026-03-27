@@ -3,7 +3,7 @@
 //! Performs type inference and type checking on the W language AST.
 //! This runs after parsing and before code generation.
 
-use crate::ast::{Expression, Type, TypeAnnotation, Operator, Pattern};
+use crate::ast::{Expression, Operator, Pattern, Type, TypeAnnotation};
 use std::collections::HashMap;
 use std::fmt;
 
@@ -39,14 +39,30 @@ pub enum TypeError {
 impl fmt::Display for TypeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TypeError::TypeMismatch { expected, actual, context } => {
-                write!(f, "Type mismatch in {}: expected {:?}, got {:?}", context, expected, actual)
+            TypeError::TypeMismatch {
+                expected,
+                actual,
+                context,
+            } => {
+                write!(
+                    f,
+                    "Type mismatch in {}: expected {:?}, got {:?}",
+                    context, expected, actual
+                )
             }
             TypeError::UndefinedIdentifier(name) => {
                 write!(f, "Undefined identifier: {}", name)
             }
-            TypeError::ArityMismatch { function, expected, actual } => {
-                write!(f, "Function {} expects {} arguments, got {}", function, expected, actual)
+            TypeError::ArityMismatch {
+                function,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "Function {} expects {} arguments, got {}",
+                    function, expected, actual
+                )
             }
             TypeError::CannotInfer(context) => {
                 write!(f, "Cannot infer type for: {}", context)
@@ -54,8 +70,16 @@ impl fmt::Display for TypeError {
             TypeError::UndefinedStruct(name) => {
                 write!(f, "Undefined struct: {}", name)
             }
-            TypeError::FieldCountMismatch { struct_name, expected, actual } => {
-                write!(f, "Struct {} expects {} fields, got {}", struct_name, expected, actual)
+            TypeError::FieldCountMismatch {
+                struct_name,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "Struct {} expects {} fields, got {}",
+                    struct_name, expected, actual
+                )
             }
         }
     }
@@ -160,20 +184,28 @@ impl TypeInference {
             }
 
             // Identifiers look up in environment
-            Expression::Identifier(name) => {
-                self.env.lookup(name)
-                    .cloned()
-                    .ok_or_else(|| TypeError::UndefinedIdentifier(name.clone()))
-            }
+            Expression::Identifier(name) => self
+                .env
+                .lookup(name)
+                .cloned()
+                .ok_or_else(|| TypeError::UndefinedIdentifier(name.clone())),
 
             // Binary operations
-            Expression::BinaryOp { left, operator, right } => {
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } => {
                 let left_type = self.infer_expression(left)?;
                 let right_type = self.infer_expression(right)?;
 
                 match operator {
                     // Arithmetic operations
-                    Operator::Add | Operator::Subtract | Operator::Multiply | Operator::Divide | Operator::Power => {
+                    Operator::Add
+                    | Operator::Subtract
+                    | Operator::Multiply
+                    | Operator::Divide
+                    | Operator::Power => {
                         // Both operands should be numeric and same type
                         if !is_numeric(&left_type) {
                             return Err(TypeError::TypeMismatch {
@@ -193,7 +225,10 @@ impl TypeInference {
                     }
 
                     // Comparison operations return bool
-                    Operator::Equals | Operator::NotEquals | Operator::LessThan | Operator::GreaterThan => {
+                    Operator::Equals
+                    | Operator::NotEquals
+                    | Operator::LessThan
+                    | Operator::GreaterThan => {
                         // Both operands should have the same type
                         if left_type != right_type {
                             return Err(TypeError::TypeMismatch {
@@ -208,7 +243,11 @@ impl TypeInference {
             }
 
             // Function definitions
-            Expression::FunctionDefinition { name, parameters, body } => {
+            Expression::FunctionDefinition {
+                name,
+                parameters,
+                body,
+            } => {
                 // Create child environment with parameters
                 let mut child_env = self.env.child();
                 for param in parameters {
@@ -230,7 +269,10 @@ impl TypeInference {
             }
 
             // Function calls
-            Expression::FunctionCall { function, arguments } => {
+            Expression::FunctionCall {
+                function,
+                arguments,
+            } => {
                 match function.as_ref() {
                     Expression::Identifier(name) => {
                         // Check for built-in functions
@@ -304,7 +346,9 @@ impl TypeInference {
                                                 });
                                             }
                                             // Check argument types
-                                            for (arg, expected_type) in arguments.iter().zip(param_types.iter()) {
+                                            for (arg, expected_type) in
+                                                arguments.iter().zip(param_types.iter())
+                                            {
                                                 let arg_type = self.infer_expression(arg)?;
                                                 if &arg_type != expected_type {
                                                     return Err(TypeError::TypeMismatch {
@@ -328,7 +372,9 @@ impl TypeInference {
                             }
                         }
                     }
-                    _ => Err(TypeError::CannotInfer("complex function expression".to_string())),
+                    _ => Err(TypeError::CannotInfer(
+                        "complex function expression".to_string(),
+                    )),
                 }
             }
 
@@ -395,7 +441,10 @@ impl TypeInference {
             }
 
             // Conditional expression
-            Expression::Cond { conditions, default_statements } => {
+            Expression::Cond {
+                conditions,
+                default_statements,
+            } => {
                 let mut result_type: Option<Type> = None;
 
                 // Check each condition
@@ -458,12 +507,33 @@ impl TypeInference {
                 }
             }
 
+            // With expression - local immutable bindings
+            Expression::With { bindings, body } => {
+                // Create child environment for binding scope
+                let mut child_env = self.env.child();
+
+                // Type check each binding sequentially and bind in child env
+                for (name, binding_expr) in bindings {
+                    let mut child_inference = TypeInference {
+                        env: child_env.clone(),
+                    };
+                    let binding_type = child_inference.infer_expression(binding_expr)?;
+                    child_env.bind(name.clone(), binding_type);
+                }
+
+                // Type check body in child environment with all bindings in scope
+                let mut body_inference = TypeInference { env: child_env };
+                body_inference.infer_expression(body)
+            }
+
             // Not yet implemented
             Expression::Program(_) => Err(TypeError::CannotInfer("program".to_string())),
             Expression::Lambda { .. } => Err(TypeError::CannotInfer("lambda".to_string())),
             Expression::LogCall { .. } => Ok(Type::Tuple(vec![])),
             Expression::Map(_) => Err(TypeError::CannotInfer("map literal".to_string())),
-            Expression::StructInstantiation { .. } => Err(TypeError::CannotInfer("struct instantiation".to_string())),
+            Expression::StructInstantiation { .. } => {
+                Err(TypeError::CannotInfer("struct instantiation".to_string()))
+            }
         }
     }
 
@@ -481,7 +551,9 @@ impl TypeInference {
             // Literal patterns must match exactly
             Pattern::Literal(expr) => {
                 // Create a temporary inference context to check the literal
-                let mut temp_inference = TypeInference { env: self.env.clone() };
+                let mut temp_inference = TypeInference {
+                    env: self.env.clone(),
+                };
                 let literal_type = temp_inference.infer_expression(expr)?;
 
                 if &literal_type != expected_type {
@@ -501,79 +573,72 @@ impl TypeInference {
             }
 
             // Constructor patterns (Some, Ok, Err, None)
-            Pattern::Constructor { name, patterns } => {
-                match name.as_str() {
-                    "Some" => {
-                        match expected_type {
-                            Type::Option(inner_type) => {
-                                if patterns.len() != 1 {
-                                    return Err(TypeError::CannotInfer(
-                                        "Some pattern must have exactly one argument".to_string()
-                                    ));
-                                }
-                                self.check_pattern(&patterns[0], inner_type, env)
-                            }
-                            _ => Err(TypeError::TypeMismatch {
-                                expected: Type::Option(Box::new(Type::Int32)),
-                                actual: expected_type.clone(),
-                                context: "Some pattern".to_string(),
-                            }),
+            Pattern::Constructor { name, patterns } => match name.as_str() {
+                "Some" => match expected_type {
+                    Type::Option(inner_type) => {
+                        if patterns.len() != 1 {
+                            return Err(TypeError::CannotInfer(
+                                "Some pattern must have exactly one argument".to_string(),
+                            ));
                         }
+                        self.check_pattern(&patterns[0], inner_type, env)
                     }
-                    "None" => {
-                        match expected_type {
-                            Type::Option(_) => {
-                                if !patterns.is_empty() {
-                                    return Err(TypeError::CannotInfer(
-                                        "None pattern should have no arguments".to_string()
-                                    ));
-                                }
-                                Ok(())
-                            }
-                            _ => Err(TypeError::TypeMismatch {
-                                expected: Type::Option(Box::new(Type::Int32)),
-                                actual: expected_type.clone(),
-                                context: "None pattern".to_string(),
-                            }),
+                    _ => Err(TypeError::TypeMismatch {
+                        expected: Type::Option(Box::new(Type::Int32)),
+                        actual: expected_type.clone(),
+                        context: "Some pattern".to_string(),
+                    }),
+                },
+                "None" => match expected_type {
+                    Type::Option(_) => {
+                        if !patterns.is_empty() {
+                            return Err(TypeError::CannotInfer(
+                                "None pattern should have no arguments".to_string(),
+                            ));
                         }
+                        Ok(())
                     }
-                    "Ok" => {
-                        match expected_type {
-                            Type::Result(ok_type, _) => {
-                                if patterns.len() != 1 {
-                                    return Err(TypeError::CannotInfer(
-                                        "Ok pattern must have exactly one argument".to_string()
-                                    ));
-                                }
-                                self.check_pattern(&patterns[0], ok_type, env)
-                            }
-                            _ => Err(TypeError::TypeMismatch {
-                                expected: Type::Result(Box::new(Type::Int32), Box::new(Type::String)),
-                                actual: expected_type.clone(),
-                                context: "Ok pattern".to_string(),
-                            }),
+                    _ => Err(TypeError::TypeMismatch {
+                        expected: Type::Option(Box::new(Type::Int32)),
+                        actual: expected_type.clone(),
+                        context: "None pattern".to_string(),
+                    }),
+                },
+                "Ok" => match expected_type {
+                    Type::Result(ok_type, _) => {
+                        if patterns.len() != 1 {
+                            return Err(TypeError::CannotInfer(
+                                "Ok pattern must have exactly one argument".to_string(),
+                            ));
                         }
+                        self.check_pattern(&patterns[0], ok_type, env)
                     }
-                    "Err" => {
-                        match expected_type {
-                            Type::Result(_, err_type) => {
-                                if patterns.len() != 1 {
-                                    return Err(TypeError::CannotInfer(
-                                        "Err pattern must have exactly one argument".to_string()
-                                    ));
-                                }
-                                self.check_pattern(&patterns[0], err_type, env)
-                            }
-                            _ => Err(TypeError::TypeMismatch {
-                                expected: Type::Result(Box::new(Type::Int32), Box::new(Type::String)),
-                                actual: expected_type.clone(),
-                                context: "Err pattern".to_string(),
-                            }),
+                    _ => Err(TypeError::TypeMismatch {
+                        expected: Type::Result(Box::new(Type::Int32), Box::new(Type::String)),
+                        actual: expected_type.clone(),
+                        context: "Ok pattern".to_string(),
+                    }),
+                },
+                "Err" => match expected_type {
+                    Type::Result(_, err_type) => {
+                        if patterns.len() != 1 {
+                            return Err(TypeError::CannotInfer(
+                                "Err pattern must have exactly one argument".to_string(),
+                            ));
                         }
+                        self.check_pattern(&patterns[0], err_type, env)
                     }
-                    _ => Err(TypeError::CannotInfer(format!("Unknown constructor: {}", name))),
-                }
-            }
+                    _ => Err(TypeError::TypeMismatch {
+                        expected: Type::Result(Box::new(Type::Int32), Box::new(Type::String)),
+                        actual: expected_type.clone(),
+                        context: "Err pattern".to_string(),
+                    }),
+                },
+                _ => Err(TypeError::CannotInfer(format!(
+                    "Unknown constructor: {}",
+                    name
+                ))),
+            },
 
             // Tuple patterns
             Pattern::Tuple(patterns) => {
@@ -635,9 +700,21 @@ impl TypeInference {
 
 /// Check if a type is numeric
 fn is_numeric(ty: &Type) -> bool {
-    matches!(ty,
-        Type::Int8 | Type::Int16 | Type::Int32 | Type::Int64 | Type::Int128 | Type::Int |
-        Type::UInt8 | Type::UInt16 | Type::UInt32 | Type::UInt64 | Type::UInt128 | Type::UInt |
-        Type::Float32 | Type::Float64
+    matches!(
+        ty,
+        Type::Int8
+            | Type::Int16
+            | Type::Int32
+            | Type::Int64
+            | Type::Int128
+            | Type::Int
+            | Type::UInt8
+            | Type::UInt16
+            | Type::UInt32
+            | Type::UInt64
+            | Type::UInt128
+            | Type::UInt
+            | Type::Float32
+            | Type::Float64
     )
 }

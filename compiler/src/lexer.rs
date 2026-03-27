@@ -36,6 +36,8 @@ pub enum Token {
     Comma,
     /// Colon `:` used for type annotations
     Colon,
+    /// Single `=` for bindings in With expressions
+    Assign,
     /// Define token `:=` for function definitions
     Define,
 
@@ -78,10 +80,10 @@ pub enum Token {
     Question,
 
     /// Logging level tokens for different verbosity levels
-    LogDebug,   // Debug log level
-    LogInfo,    // Info log level
-    LogWarn,    // Warning log level
-    LogError,   // Error log level
+    LogDebug, // Debug log level
+    LogInfo,  // Info log level
+    LogWarn,  // Warning log level
+    LogError, // Error log level
 
     // Error handling keywords (Rust's safety model)
     /// None - represents empty Option value
@@ -169,7 +171,7 @@ impl Lexer {
     pub fn next_token(&mut self) -> Option<Token> {
         // Skip any leading whitespace
         self.skip_whitespace();
-        
+
         // Check if we've reached the end of input
         if self.position >= self.input.len() {
             return None;
@@ -248,8 +250,8 @@ impl Lexer {
                     self.position += 1;
                     Some(Token::Equals)
                 } else {
-                    // Single = is not a token in this language
-                    None
+                    // Single = is the assign token (for With bindings)
+                    Some(Token::Assign)
                 }
             }
             '!' => {
@@ -309,7 +311,7 @@ impl Lexer {
                     "Some" => Some(Token::Some),
                     "Ok" => Some(Token::Ok),
                     "Err" => Some(Token::Err),
-                    _ => Some(Token::Identifier(identifier))
+                    _ => Some(Token::Identifier(identifier)),
                 }
             }
             c if c.is_digit(10) => {
@@ -333,7 +335,8 @@ impl Lexer {
             // Check for ML-style comments (* ... *)
             if self.position + 1 < self.input.len()
                 && self.input[self.position] == '('
-                && self.input[self.position + 1] == '*' {
+                && self.input[self.position + 1] == '*'
+            {
                 // Skip the opening (*
                 self.position += 2;
 
@@ -355,10 +358,11 @@ impl Lexer {
 
     fn read_identifier(&mut self) -> String {
         let mut identifier = String::new();
-        while self.position < self.input.len() &&
-              (self.input[self.position].is_alphabetic() ||
-               self.input[self.position].is_digit(10) ||
-               self.input[self.position] == '_') {
+        while self.position < self.input.len()
+            && (self.input[self.position].is_alphabetic()
+                || self.input[self.position].is_digit(10)
+                || self.input[self.position] == '_')
+        {
             identifier.push(self.input[self.position]);
             self.position += 1;
         }
@@ -367,8 +371,7 @@ impl Lexer {
 
     fn read_number(&mut self) -> i32 {
         let mut number = String::new();
-        while self.position < self.input.len() &&
-              self.input[self.position].is_digit(10) {
+        while self.position < self.input.len() && self.input[self.position].is_digit(10) {
             number.push(self.input[self.position]);
             self.position += 1;
         }
@@ -379,8 +382,7 @@ impl Lexer {
         // Consume opening quote
         self.position += 1;
         let mut string = String::new();
-        while self.position < self.input.len() && 
-              self.input[self.position] != '"' {
+        while self.position < self.input.len() && self.input[self.position] != '"' {
             string.push(self.input[self.position]);
             self.position += 1;
         }

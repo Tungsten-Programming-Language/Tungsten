@@ -151,6 +151,38 @@ Match[Some[(42, "answer")],
 ]
 ```
 
+### Local Bindings with `With`
+
+W provides the `With` expression for creating local immutable bindings in a lexical scope. This is inspired by Wolfram Language and is particularly useful for data pipelines where intermediate values need names.
+
+```
+(* Simple binding *)
+With[{x = 5}, x + 1]             (* Returns 6 *)
+
+(* Multiple bindings *)
+With[{x = 1, y = 2}, x + y]      (* Returns 3 *)
+
+(* Sequential bindings - later bindings can reference earlier ones *)
+With[{x = 1, y = x + 1}, y * 2]  (* Returns 4 *)
+
+(* Bindings are immutable - shadowing creates new scope *)
+With[{x = 1}, With[{x = 2}, x]]  (* Inner x shadows outer x *)
+
+(* Useful in data pipelines *)
+data |> Filter[x -> x > 0] |> With[{
+  positive_data = _
+}, Map[y -> y * 2, positive_data]]
+
+(* With comprehensible intermediate steps *)
+With[{
+  raw_data = ReadCSV["data.csv"],
+  cleaned = Filter[row -> row.active == true, raw_data],
+  transformed = Map[row -> row.salary * 1.1, cleaned]
+}, transformed]
+```
+
+Bindings are **sequential** - each binding can reference variables from previous bindings in the same `With` expression. The body expression has access to all bindings in its scope. Bindings are **immutable** - they cannot be reassigned (use `Module` for mutable state, coming soon).
+
 ### Closures and Higher-Order Functions
 ```
 (* Lambda/Anonymous function syntax *)

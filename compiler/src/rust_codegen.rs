@@ -2,9 +2,9 @@
 //!
 //! Translates the W language AST into idiomatic Rust source code
 
-use crate::ast::{Expression, Operator, LogLevel, Type, TypeAnnotation, Pattern};
-use std::fmt::Write;
+use crate::ast::{Expression, LogLevel, Operator, Pattern, Type, TypeAnnotation};
 use std::collections::HashMap;
+use std::fmt::Write;
 
 pub struct RustCodeGenerator {
     output: String,
@@ -43,9 +43,8 @@ impl RustCodeGenerator {
 
                 for e in expressions {
                     match e {
-                        Expression::FunctionDefinition { .. } | Expression::StructDefinition { .. } => {
-                            top_level_items.push(e)
-                        }
+                        Expression::FunctionDefinition { .. }
+                        | Expression::StructDefinition { .. } => top_level_items.push(e),
                         _ => statements.push(e),
                     }
                 }
@@ -98,7 +97,11 @@ impl RustCodeGenerator {
     /// Generate top-level items (functions, structs, etc.)
     fn generate_top_level_item(&mut self, expr: &Expression) -> Result<(), std::fmt::Error> {
         match expr {
-            Expression::FunctionDefinition { name, parameters, body } => {
+            Expression::FunctionDefinition {
+                name,
+                parameters,
+                body,
+            } => {
                 self.generate_function_definition(name, parameters, body)?;
             }
             Expression::StructDefinition { name, fields } => {
@@ -165,24 +168,33 @@ impl RustCodeGenerator {
         fields: &[TypeAnnotation],
     ) -> Result<(), std::fmt::Error> {
         // Track this struct's field names for constructor detection
-        let field_names: Vec<String> = fields.iter()
-            .map(|f| to_snake_case(&f.name))
-            .collect();
-        self.struct_definitions.insert(name.to_string(), field_names);
+        let field_names: Vec<String> = fields.iter().map(|f| to_snake_case(&f.name)).collect();
+        self.struct_definitions
+            .insert(name.to_string(), field_names);
 
         // Generate: #[derive(Debug, Clone, PartialEq)]
         //           pub struct Name {
         //               field1: Type1,
         //               field2: Type2,
         //           }
-        writeln!(self.output, "{}#[derive(Debug, Clone, PartialEq)]", self.indent())?;
+        writeln!(
+            self.output,
+            "{}#[derive(Debug, Clone, PartialEq)]",
+            self.indent()
+        )?;
         writeln!(self.output, "{}pub struct {} {{", self.indent(), name)?;
 
         self.indent_level += 1;
         for field in fields {
             let field_name = to_snake_case(&field.name);
             let field_type = self.type_to_rust(&field.type_);
-            writeln!(self.output, "{}pub {}: {},", self.indent(), field_name, field_type)?;
+            writeln!(
+                self.output,
+                "{}pub {}: {},",
+                self.indent(),
+                field_name,
+                field_type
+            )?;
         }
         self.indent_level -= 1;
 
@@ -224,9 +236,8 @@ impl RustCodeGenerator {
                 if types.is_empty() {
                     "()".to_string()
                 } else {
-                    let type_strs: Vec<String> = types.iter()
-                        .map(|t| self.type_to_rust(t))
-                        .collect();
+                    let type_strs: Vec<String> =
+                        types.iter().map(|t| self.type_to_rust(t)).collect();
                     format!("({})", type_strs.join(", "))
                 }
             }
@@ -236,30 +247,43 @@ impl RustCodeGenerator {
             Type::Array(inner, size) => format!("[{}; {}]", self.type_to_rust(inner), size),
             Type::Slice(inner) => format!("&[{}]", self.type_to_rust(inner)),
             Type::Map(key, value) => {
-                format!("std::collections::HashMap<{}, {}>",
+                format!(
+                    "std::collections::HashMap<{}, {}>",
                     self.type_to_rust(key),
-                    self.type_to_rust(value))
+                    self.type_to_rust(value)
+                )
             }
-            Type::HashSet(inner) => format!("std::collections::HashSet<{}>", self.type_to_rust(inner)),
+            Type::HashSet(inner) => {
+                format!("std::collections::HashSet<{}>", self.type_to_rust(inner))
+            }
             Type::BTreeMap(key, value) => {
-                format!("std::collections::BTreeMap<{}, {}>",
+                format!(
+                    "std::collections::BTreeMap<{}, {}>",
                     self.type_to_rust(key),
-                    self.type_to_rust(value))
+                    self.type_to_rust(value)
+                )
             }
-            Type::BTreeSet(inner) => format!("std::collections::BTreeSet<{}>", self.type_to_rust(inner)),
+            Type::BTreeSet(inner) => {
+                format!("std::collections::BTreeSet<{}>", self.type_to_rust(inner))
+            }
             Type::Function(params, ret) => {
-                let param_types: Vec<String> = params.iter()
-                    .map(|p| self.type_to_rust(p))
-                    .collect();
-                format!("fn({}) -> {}", param_types.join(", "), self.type_to_rust(ret))
+                let param_types: Vec<String> =
+                    params.iter().map(|p| self.type_to_rust(p)).collect();
+                format!(
+                    "fn({}) -> {}",
+                    param_types.join(", "),
+                    self.type_to_rust(ret)
+                )
             }
 
             // Error handling types (Rust's safety model)
             Type::Option(inner) => format!("Option<{}>", self.type_to_rust(inner)),
             Type::Result(ok_type, err_type) => {
-                format!("Result<{}, {}>",
+                format!(
+                    "Result<{}, {}>",
                     self.type_to_rust(ok_type),
-                    self.type_to_rust(err_type))
+                    self.type_to_rust(err_type)
+                )
             }
 
             // Special types
@@ -273,7 +297,7 @@ impl RustCodeGenerator {
     /// Infer return type from expression
     fn infer_return_type(&self, expr: &Expression, parameters: &[TypeAnnotation]) -> String {
         match expr {
-            Expression::Number(_) => "i32".to_string(),  // Default to i32 like Rust
+            Expression::Number(_) => "i32".to_string(), // Default to i32 like Rust
             Expression::Float(_) => "f64".to_string(),
             Expression::String(_) => "String".to_string(),
             Expression::Boolean(_) => "bool".to_string(),
@@ -281,7 +305,8 @@ impl RustCodeGenerator {
                 if elements.is_empty() {
                     "()".to_string()
                 } else {
-                    let element_types: Vec<String> = elements.iter()
+                    let element_types: Vec<String> = elements
+                        .iter()
                         .map(|e| self.infer_return_type(e, parameters))
                         .collect();
                     format!("({})", element_types.join(", "))
@@ -298,16 +323,33 @@ impl RustCodeGenerator {
                 }
                 "()".to_string()
             }
-            Expression::BinaryOp { left, right: _, operator } => {
+            Expression::BinaryOp {
+                left,
+                right: _,
+                operator,
+            } => {
                 // Infer from left operand (simplified)
                 let left_type = self.infer_return_type(left, parameters);
                 // For arithmetic operations, return the inferred type
                 match operator {
                     Operator::Add | Operator::Subtract | Operator::Multiply | Operator::Divide => {
                         // If left is a known numeric type, return it
-                        if matches!(left_type.as_str(), "i8" | "i16" | "i32" | "i64" | "i128" | "isize" |
-                                    "u8" | "u16" | "u32" | "u64" | "u128" | "usize" |
-                                    "f32" | "f64") {
+                        if matches!(
+                            left_type.as_str(),
+                            "i8" | "i16"
+                                | "i32"
+                                | "i64"
+                                | "i128"
+                                | "isize"
+                                | "u8"
+                                | "u16"
+                                | "u32"
+                                | "u64"
+                                | "u128"
+                                | "usize"
+                                | "f32"
+                                | "f64"
+                        ) {
                             left_type
                         } else {
                             "i32".to_string() // Default
@@ -317,22 +359,26 @@ impl RustCodeGenerator {
                 }
             }
             // Error handling types
-            Expression::None => "Option<()>".to_string(),  // Type needs context
+            Expression::None => "Option<()>".to_string(), // Type needs context
             Expression::Some { value } => {
                 let inner_type = self.infer_return_type(value, parameters);
                 format!("Option<{}>", inner_type)
             }
             Expression::Ok { value } => {
                 let ok_type = self.infer_return_type(value, parameters);
-                format!("Result<{}, ()>", ok_type)  // Error type needs context
+                format!("Result<{}, ()>", ok_type) // Error type needs context
             }
             Expression::Err { error } => {
                 let err_type = self.infer_return_type(error, parameters);
-                format!("Result<(), {}>", err_type)  // Ok type needs context
+                format!("Result<(), {}>", err_type) // Ok type needs context
             }
             Expression::Propagate { expr } => {
                 // ? unwraps the inner type
                 self.infer_return_type(expr, parameters)
+            }
+            Expression::With { body, .. } => {
+                // Return type is the type of the body expression
+                self.infer_return_type(body, parameters)
             }
             _ => "()".to_string(),
         }
@@ -341,7 +387,10 @@ impl RustCodeGenerator {
     /// Generate a statement (expression with side effects, like println or assignments)
     fn generate_statement(&mut self, expr: &Expression) -> Result<(), std::fmt::Error> {
         match expr {
-            Expression::FunctionCall { function, arguments } => {
+            Expression::FunctionCall {
+                function,
+                arguments,
+            } => {
                 match function.as_ref() {
                     Expression::Identifier(name) if name == "Print" => {
                         // Generate print call
@@ -349,17 +398,25 @@ impl RustCodeGenerator {
 
                         // Generate format string with appropriate formatters
                         if !arguments.is_empty() {
-                            let format_parts: Vec<String> = arguments.iter()
+                            let format_parts: Vec<String> = arguments
+                                .iter()
                                 .map(|arg| {
                                     // Use {:?} for complex types that don't implement Display
                                     match arg {
-                                        Expression::List(_) | Expression::Map(_) | Expression::Tuple(_) => "{:?}".to_string(),
+                                        Expression::List(_)
+                                        | Expression::Map(_)
+                                        | Expression::Tuple(_) => "{:?}".to_string(),
                                         // Also check for Map/Filter function calls that return Vec
                                         Expression::FunctionCall { function, .. } => {
                                             match function.as_ref() {
                                                 Expression::Identifier(name) => {
                                                     // Check if it's Map/Filter or a struct constructor
-                                                    if name == "Map" || name == "Filter" || self.struct_definitions.contains_key(name) {
+                                                    if name == "Map"
+                                                        || name == "Filter"
+                                                        || self
+                                                            .struct_definitions
+                                                            .contains_key(name)
+                                                    {
                                                         "{:?}".to_string()
                                                     } else {
                                                         "{}".to_string()
@@ -459,12 +516,20 @@ impl RustCodeGenerator {
                 // Generate HashMap initialization
                 let mut result = String::from("{\n");
                 self.indent_level += 1;
-                result.push_str(&format!("{}let mut map = std::collections::HashMap::new();\n", self.indent()));
+                result.push_str(&format!(
+                    "{}let mut map = std::collections::HashMap::new();\n",
+                    self.indent()
+                ));
 
                 for (key, value) in entries {
                     let key_val = self.generate_expression_value(key)?;
                     let value_val = self.generate_expression_value(value)?;
-                    result.push_str(&format!("{}map.insert({}, {});\n", self.indent(), key_val, value_val));
+                    result.push_str(&format!(
+                        "{}map.insert({}, {});\n",
+                        self.indent(),
+                        key_val,
+                        value_val
+                    ));
                 }
 
                 result.push_str(&format!("{}map\n", self.indent()));
@@ -473,7 +538,11 @@ impl RustCodeGenerator {
                 Ok(result)
             }
 
-            Expression::BinaryOp { left, operator, right } => {
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } => {
                 let left_val = self.generate_expression_value(left)?;
                 let right_val = self.generate_expression_value(right)?;
 
@@ -494,7 +563,10 @@ impl RustCodeGenerator {
                 }
             }
 
-            Expression::FunctionCall { function, arguments } => {
+            Expression::FunctionCall {
+                function,
+                arguments,
+            } => {
                 match function.as_ref() {
                     Expression::Identifier(name) => {
                         // Check for built-in functions
@@ -531,15 +603,20 @@ impl RustCodeGenerator {
                                         if parameters.len() == 1 {
                                             let param = &to_snake_case(&parameters[0].name);
                                             let body_str = self.generate_expression_value(body)?;
-                                            Ok(format!("{}.into_iter().map(|{}| {}).collect::<Vec<_>>()",
-                                                list, param, body_str))
+                                            Ok(format!(
+                                                "{}.into_iter().map(|{}| {}).collect::<Vec<_>>()",
+                                                list, param, body_str
+                                            ))
                                         } else {
                                             Err(std::fmt::Error)
                                         }
                                     }
                                     _ => {
                                         let func = self.generate_expression_value(&arguments[0])?;
-                                        Ok(format!("{}.into_iter().map({}).collect::<Vec<_>>()", list, func))
+                                        Ok(format!(
+                                            "{}.into_iter().map({}).collect::<Vec<_>>()",
+                                            list, func
+                                        ))
                                     }
                                 }
                             }
@@ -566,7 +643,10 @@ impl RustCodeGenerator {
                                     }
                                     _ => {
                                         // For non-lambda functions, use the function directly
-                                        Ok(format!("{}.into_iter().filter({}).collect::<Vec<_>>()", list, func))
+                                        Ok(format!(
+                                            "{}.into_iter().filter({}).collect::<Vec<_>>()",
+                                            list, func
+                                        ))
                                     }
                                 }
                             }
@@ -584,8 +664,10 @@ impl RustCodeGenerator {
                                             let param1 = &to_snake_case(&parameters[0].name);
                                             let param2 = &to_snake_case(&parameters[1].name);
                                             let body_str = self.generate_expression_value(body)?;
-                                            Ok(format!("{}.into_iter().fold({}, |{}, {}| {})",
-                                                list, init, param1, param2, body_str))
+                                            Ok(format!(
+                                                "{}.into_iter().fold({}, |{}, {}| {})",
+                                                list, init, param1, param2, body_str
+                                            ))
                                         } else {
                                             Err(std::fmt::Error)
                                         }
@@ -603,16 +685,24 @@ impl RustCodeGenerator {
 
                                 write!(&mut result, "{}println!(", self.indent())?;
                                 if !arguments.is_empty() {
-                                    let format_parts: Vec<String> = arguments.iter()
+                                    let format_parts: Vec<String> = arguments
+                                        .iter()
                                         .map(|arg| {
                                             match arg {
-                                                Expression::List(_) | Expression::Map(_) | Expression::Tuple(_) => "{:?}".to_string(),
+                                                Expression::List(_)
+                                                | Expression::Map(_)
+                                                | Expression::Tuple(_) => "{:?}".to_string(),
                                                 // Also check for Map/Filter function calls that return Vec
                                                 Expression::FunctionCall { function, .. } => {
                                                     match function.as_ref() {
                                                         Expression::Identifier(name) => {
                                                             // Check if it's Map/Filter or a struct constructor
-                                                            if name == "Map" || name == "Filter" || self.struct_definitions.contains_key(name) {
+                                                            if name == "Map"
+                                                                || name == "Filter"
+                                                                || self
+                                                                    .struct_definitions
+                                                                    .contains_key(name)
+                                                            {
                                                                 "{:?}".to_string()
                                                             } else {
                                                                 "{}".to_string()
@@ -641,14 +731,18 @@ impl RustCodeGenerator {
                             }
                             _ => {
                                 // Check if this is a struct constructor
-                                if let Some(field_names) = self.struct_definitions.get(name).cloned() {
+                                if let Some(field_names) =
+                                    self.struct_definitions.get(name).cloned()
+                                {
                                     // Generate struct instantiation: StructName { field1: value1, field2: value2 }
                                     if field_names.len() != arguments.len() {
                                         return Err(std::fmt::Error);
                                     }
 
                                     let mut result = format!("{} {{ ", name);
-                                    for (i, (field_name, arg)) in field_names.iter().zip(arguments.iter()).enumerate() {
+                                    for (i, (field_name, arg)) in
+                                        field_names.iter().zip(arguments.iter()).enumerate()
+                                    {
                                         if i > 0 {
                                             result.push_str(", ");
                                         }
@@ -679,7 +773,10 @@ impl RustCodeGenerator {
                 }
             }
 
-            Expression::Cond { conditions, default_statements } => {
+            Expression::Cond {
+                conditions,
+                default_statements,
+            } => {
                 // Generate if-else chain
                 let mut result = String::new();
 
@@ -791,10 +888,15 @@ impl RustCodeGenerator {
                 Ok(format!("({})?", inner))
             }
 
-            Expression::StructInstantiation { struct_name, field_values } => {
+            Expression::StructInstantiation {
+                struct_name,
+                field_values,
+            } => {
                 // Generate: StructName { field1: value1, field2: value2 }
                 // Look up the field names from the struct definition
-                let field_names = self.struct_definitions.get(struct_name)
+                let field_names = self
+                    .struct_definitions
+                    .get(struct_name)
                     .cloned()
                     .ok_or(std::fmt::Error)?;
 
@@ -806,7 +908,9 @@ impl RustCodeGenerator {
                 let mut result = format!("{} {{ ", struct_name);
 
                 // Generate field: value pairs
-                for (i, (field_name, value)) in field_names.iter().zip(field_values.iter()).enumerate() {
+                for (i, (field_name, value)) in
+                    field_names.iter().zip(field_values.iter()).enumerate()
+                {
                     if i > 0 {
                         result.push_str(", ");
                     }
@@ -815,6 +919,37 @@ impl RustCodeGenerator {
                 }
 
                 result.push_str(" }");
+                Ok(result)
+            }
+
+            Expression::With { bindings, body } => {
+                // Generate Rust block expression:
+                // {
+                //   let x = expr1;
+                //   let y = expr2;
+                //   body_expr
+                // }
+                let mut result = String::from("{\n");
+                self.indent_level += 1;
+
+                // Generate let statements for each binding
+                for (name, expr) in bindings {
+                    let name_snake = to_snake_case(name);
+                    let expr_str = self.generate_expression_value(expr)?;
+                    result.push_str(&format!(
+                        "{}let {} = {};\n",
+                        self.indent(),
+                        name_snake,
+                        expr_str
+                    ));
+                }
+
+                // Generate body expression (without semicolon, as it's a value)
+                let body_str = self.generate_expression_value(body)?;
+                result.push_str(&format!("{}{}\n", self.indent(), body_str));
+
+                self.indent_level -= 1;
+                result.push_str(&format!("{}}}", self.indent()));
                 Ok(result)
             }
         }
