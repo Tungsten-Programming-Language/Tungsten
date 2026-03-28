@@ -1,5 +1,54 @@
 # The W (Tungsten) Programming Language
 
+## What is the Tungsten programming language?
+
+Tungsten (W) is a functional programming language that transpiles to Rust, heavily influenced by the syntax of the Wolfram Language used in Mathematica. In its initial phase, its primary focus is on data engineering tasks but could be extended to all areas with additional library packages.
+
+## Motivation
+
+Rust offers the best overall memory and processing performance, memory safety, security, and verifiability among mainstream programming languages today. However, its memory safety rules often create verbose, nested code structures that are difficult to read and write. When syntax becomes complex, the focus is shifted from the procedures, which should be the focus, to syntactical correctness. What Tungsten aims to achieve is a whole new approach to writing programs that still offers the benefits of the Rust compiler.
+
+## Language Approach
+
+Since LISP was developed at MIT, there has been a number of small but dedicated communities around LISP-like languages such as Clojure who extoll the virtues of a lambda calculus-based syntax. One of the major benefits is language simplicity. However, these languages have not been widely adopted, in the author's opinion, because of the inside-out parsing (onion parsing) of the source code. With many nested parenthetical groups, it can be very difficult to read with a bias towards C-like languages.
+
+Wolfram Language meets this half way by using a syntax where functions take bracketed arguments but still reads from the outside in. This change yields significantly easier to read source code that is still concise and functional.
+
+### Syntax Comparison
+
+Consider a function that computes the average of the squares of numbers in a filtered list. Here's how it looks in both LISP and Wolfram Language:
+
+**LISP (inside-out parsing):**
+```lisp
+(/ (reduce #'+ 
+           (mapcar (lambda (x) (* x x))
+                   (remove-if-not (lambda (x) (> x 5)) 
+                                  '(1 6 3 8 2 9 4 7))))
+   (length (remove-if-not (lambda (x) (> x 5)) 
+                          '(1 6 3 8 2 9 4 7))))
+```
+
+**Wolfram Language (outside-in parsing):**
+```wolfram
+Divide[
+  Total[
+    Map[
+      Function[x, Times[x, x]],
+      Select[Range[1, 6, 3, 8, 2, 9, 4, 7], Function[x, Greater[x, 5]]]
+    ]
+  ],
+  Length[
+    Select[Range[1, 6, 3, 8, 2, 9, 4, 7], Function[x, Greater[x, 5]]]
+  ]
+]
+```
+
+In the LISP version, you must parse from the innermost parentheses outward, making it difficult to understand the overall structure at a glance. The Wolfram Language version reads naturally from outside-in: "Divide the total of mapped squares by the length of the selection." Tungsten adopts this readable, functional syntax while transpiling to high-performance Rust code.
+
+## What Tungsten Offers
+
+Tungsten offers a language that hides much of the complexity of the Rust borrow checker, mutability rules, and verbosity from the users so that they can focus on the problem to be solved with a cognitive ease comparable to Python and Ruby. Its parser does its own type checking to ensure that the transpiled Rust code is compilable, then Rust takes over and compiles the executable binary. The end product is an executable that offers all the performance and safety guarantees of Rust.
+
 ## Language Philosophy
 
 W is a statically-typed functional programming language with a syntax inspired by Wolfram Language that transpiles to Rust. The core principles are:
