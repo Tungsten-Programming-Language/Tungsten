@@ -321,23 +321,14 @@ impl Parser {
     }
 
     fn parse_binary_operation(&mut self) -> Option<Expression> {
-        let mut left = self.parse_primary()?;
+        self.parse_comparison()
+    }
 
-        // Handle postfix ? operator (highest precedence, binds before binary ops)
-        while matches!(&self.current_token, Some(Token::Question)) {
-            self.advance();
-            left = Expression::Propagate {
-                expr: Box::new(left),
-            };
-        }
+    fn parse_comparison(&mut self) -> Option<Expression> {
+        let mut left = self.parse_additive()?;
 
         while let Some(token) = &self.current_token {
             let operator = match token {
-                Token::Plus => Operator::Add,
-                Token::Minus => Operator::Subtract,
-                Token::Multiply => Operator::Multiply,
-                Token::Divide => Operator::Divide,
-                Token::Power => Operator::Power,
                 Token::Equals => Operator::Equals,
                 Token::NotEquals => Operator::NotEquals,
                 Token::LessThan => Operator::LessThan,
@@ -346,19 +337,80 @@ impl Parser {
             };
 
             self.advance();
-            let mut right = self.parse_primary()?;
-
-            // Handle postfix ? on right operand
-            while matches!(&self.current_token, Some(Token::Question)) {
-                self.advance();
-                right = Expression::Propagate {
-                    expr: Box::new(right),
-                };
-            }
+            let right = self.parse_additive()?;
 
             left = Expression::BinaryOp {
                 left: Box::new(left),
                 operator,
+                right: Box::new(right),
+            };
+        }
+
+        Some(left)
+    }
+
+    fn parse_additive(&mut self) -> Option<Expression> {
+        let mut left = self.parse_multiplicative()?;
+
+        while let Some(token) = &self.current_token {
+            let operator = match token {
+                Token::Plus => Operator::Add,
+                Token::Minus => Operator::Subtract,
+                _ => break,
+            };
+
+            self.advance();
+            let right = self.parse_multiplicative()?;
+
+            left = Expression::BinaryOp {
+                left: Box::new(left),
+                operator,
+                right: Box::new(right),
+            };
+        }
+
+        Some(left)
+    }
+
+    fn parse_multiplicative(&mut self) -> Option<Expression> {
+        let mut left = self.parse_power()?;
+
+        while let Some(token) = &self.current_token {
+            let operator = match token {
+                Token::Multiply => Operator::Multiply,
+                Token::Divide => Operator::Divide,
+                _ => break,
+            };
+
+            self.advance();
+            let right = self.parse_power()?;
+
+            left = Expression::BinaryOp {
+                left: Box::new(left),
+                operator,
+                right: Box::new(right),
+            };
+        }
+
+        Some(left)
+    }
+
+    fn parse_power(&mut self) -> Option<Expression> {
+        let mut left = self.parse_primary()?;
+
+        while matches!(&self.current_token, Some(Token::Question)) {
+            self.advance();
+            left = Expression::Propagate {
+                expr: Box::new(left),
+            };
+        }
+
+        if matches!(&self.current_token, Some(Token::Power)) {
+            self.advance();
+            let right = self.parse_power()?;
+            left = Expression::BinaryOp {
+                left: Box::new(left),
+                operator: Operator::Power,
                 right: Box::new(right),
             };
         }
