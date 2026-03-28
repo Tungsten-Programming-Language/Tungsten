@@ -324,3 +324,6 @@ W supports a comprehensive type system that maps directly to Rust types:
 ## Current Status
 
 This is an experimental transpiler written in Rust, exploring functional language design and Rust code generation. The project demonstrates how a high-level functional syntax can compile down to efficient, safe Rust code.
+
+---
+Written with [Z.AI](https://z.ai) in [Opencode](https://opencode.ai)
