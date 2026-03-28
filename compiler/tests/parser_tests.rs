@@ -324,4 +324,179 @@ mod tests {
             _ => panic!("Expected Cond expression"),
         }
     }
+
+    #[test]
+    fn test_operator_precedence_multiplication_before_addition() {
+        let mut parser = Parser::new("2 + 3 * 4".to_string());
+        let expr = parser.parse().unwrap();
+
+        match expr {
+            Expression::BinaryOp {
+                left,
+                operator: w::ast::Operator::Add,
+                right,
+            } => {
+                match *left {
+                    Expression::Number(n) => assert_eq!(n, 2),
+                    _ => panic!("Expected number 2"),
+                }
+                match *right {
+                    Expression::BinaryOp {
+                        left,
+                        operator: w::ast::Operator::Multiply,
+                        right,
+                    } => {
+                        match *left {
+                            Expression::Number(n) => assert_eq!(n, 3),
+                            _ => panic!("Expected number 3"),
+                        }
+                        match *right {
+                            Expression::Number(n) => assert_eq!(n, 4),
+                            _ => panic!("Expected number 4"),
+                        }
+                    }
+                    _ => panic!("Expected multiplication"),
+                }
+            }
+            _ => panic!("Expected addition"),
+        }
+    }
+
+    #[test]
+    fn test_operator_precedence_division_before_subtraction() {
+        let mut parser = Parser::new("10 - 6 / 2".to_string());
+        let expr = parser.parse().unwrap();
+
+        match expr {
+            Expression::BinaryOp {
+                left,
+                operator: w::ast::Operator::Subtract,
+                right,
+            } => {
+                match *left {
+                    Expression::Number(n) => assert_eq!(n, 10),
+                    _ => panic!("Expected number 10"),
+                }
+                match *right {
+                    Expression::BinaryOp {
+                        operator: w::ast::Operator::Divide,
+                        ..
+                    } => {}
+                    _ => panic!("Expected division"),
+                }
+            }
+            _ => panic!("Expected subtraction"),
+        }
+    }
+
+    #[test]
+    fn test_operator_precedence_power_before_multiply() {
+        let mut parser = Parser::new("2 * 3 ^ 4".to_string());
+        let expr = parser.parse().unwrap();
+
+        match expr {
+            Expression::BinaryOp {
+                left,
+                operator: w::ast::Operator::Multiply,
+                right,
+            } => {
+                match *left {
+                    Expression::Number(n) => assert_eq!(n, 2),
+                    _ => panic!("Expected number 2"),
+                }
+                match *right {
+                    Expression::BinaryOp {
+                        operator: w::ast::Operator::Power,
+                        ..
+                    } => {}
+                    _ => panic!("Expected power"),
+                }
+            }
+            _ => panic!("Expected multiplication"),
+        }
+    }
+
+    #[test]
+    fn test_operator_precedence_power_right_associative() {
+        let mut parser = Parser::new("2 ^ 3 ^ 4".to_string());
+        let expr = parser.parse().unwrap();
+
+        match expr {
+            Expression::BinaryOp {
+                left,
+                operator: w::ast::Operator::Power,
+                right,
+            } => {
+                match *left {
+                    Expression::Number(n) => assert_eq!(n, 2),
+                    _ => panic!("Expected number 2"),
+                }
+                match *right {
+                    Expression::BinaryOp {
+                        operator: w::ast::Operator::Power,
+                        ..
+                    } => {}
+                    _ => panic!("Expected nested power"),
+                }
+            }
+            _ => panic!("Expected power"),
+        }
+    }
+
+    #[test]
+    fn test_operator_precedence_left_associative_multiply() {
+        let mut parser = Parser::new("8 / 4 / 2".to_string());
+        let expr = parser.parse().unwrap();
+
+        match expr {
+            Expression::BinaryOp {
+                left,
+                operator: w::ast::Operator::Divide,
+                right,
+            } => {
+                match *left {
+                    Expression::BinaryOp {
+                        operator: w::ast::Operator::Divide,
+                        ..
+                    } => {}
+                    _ => panic!("Expected left division to be grouped first"),
+                }
+                match *right {
+                    Expression::Number(n) => assert_eq!(n, 2),
+                    _ => panic!("Expected number 2"),
+                }
+            }
+            _ => panic!("Expected division"),
+        }
+    }
+
+    #[test]
+    fn test_operator_precedence_comparison_lowest() {
+        let mut parser = Parser::new("2 + 3 < 4 * 5".to_string());
+        let expr = parser.parse().unwrap();
+
+        match expr {
+            Expression::BinaryOp {
+                left,
+                operator: w::ast::Operator::LessThan,
+                right,
+            } => {
+                match *left {
+                    Expression::BinaryOp {
+                        operator: w::ast::Operator::Add,
+                        ..
+                    } => {}
+                    _ => panic!("Expected addition on left"),
+                }
+                match *right {
+                    Expression::BinaryOp {
+                        operator: w::ast::Operator::Multiply,
+                        ..
+                    } => {}
+                    _ => panic!("Expected multiplication on right"),
+                }
+            }
+            _ => panic!("Expected less than"),
+        }
+    }
 }
