@@ -321,7 +321,29 @@ impl Parser {
     }
 
     fn parse_binary_operation(&mut self) -> Option<Expression> {
-        self.parse_comparison()
+        self.parse_logical()
+    }
+
+    fn parse_logical(&mut self) -> Option<Expression> {
+        let mut left = self.parse_comparison()?;
+
+        while let Some(token) = &self.current_token {
+            let operator = match token {
+                Token::And => Operator::And,
+                _ => break,
+            };
+
+            self.advance();
+            let right = self.parse_comparison()?;
+
+            left = Expression::BinaryOp {
+                left: Box::new(left),
+                operator,
+                right: Box::new(right),
+            };
+        }
+
+        Some(left)
     }
 
     fn parse_comparison(&mut self) -> Option<Expression> {
@@ -333,6 +355,8 @@ impl Parser {
                 Token::NotEquals => Operator::NotEquals,
                 Token::LessThan => Operator::LessThan,
                 Token::GreaterThan => Operator::GreaterThan,
+                Token::LessEqual => Operator::LessEqual,
+                Token::GreaterEqual => Operator::GreaterEqual,
                 _ => break,
             };
 

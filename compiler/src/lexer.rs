@@ -69,6 +69,12 @@ pub enum Token {
     LessThan,
     /// Greater than comparison `>`
     GreaterThan,
+    /// Less than or equal comparison `<=`
+    LessEqual,
+    /// Greater than or equal comparison `>=`
+    GreaterEqual,
+    /// Logical AND operator `&&`
+    And,
 
     /// Pipe operator `|>`
     Pipe,
@@ -267,11 +273,34 @@ impl Lexer {
             }
             '<' => {
                 self.position += 1;
-                Some(Token::LessThan)
+                // Check for <=
+                if self.position < self.input.len() && self.input[self.position] == '=' {
+                    self.position += 1;
+                    Some(Token::LessEqual)
+                } else {
+                    Some(Token::LessThan)
+                }
             }
             '>' => {
                 self.position += 1;
-                Some(Token::GreaterThan)
+                // Check for >=
+                if self.position < self.input.len() && self.input[self.position] == '=' {
+                    self.position += 1;
+                    Some(Token::GreaterEqual)
+                } else {
+                    Some(Token::GreaterThan)
+                }
+            }
+            '&' => {
+                self.position += 1;
+                // Check for &&
+                if self.position < self.input.len() && self.input[self.position] == '&' {
+                    self.position += 1;
+                    Some(Token::And)
+                } else {
+                    // Single & is not a token in this language
+                    None
+                }
             }
             '|' => {
                 self.position += 1;

@@ -560,6 +560,9 @@ impl RustCodeGenerator {
                     Operator::NotEquals => Ok(format!("({} != {})", left_val, right_val)),
                     Operator::LessThan => Ok(format!("({} < {})", left_val, right_val)),
                     Operator::GreaterThan => Ok(format!("({} > {})", left_val, right_val)),
+                    Operator::LessEqual => Ok(format!("({} <= {})", left_val, right_val)),
+                    Operator::GreaterEqual => Ok(format!("({} >= {})", left_val, right_val)),
+                    Operator::And => Ok(format!("({} && {})", left_val, right_val)),
                 }
             }
 
