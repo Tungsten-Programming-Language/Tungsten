@@ -203,4 +203,7 @@ pub enum Operator {
     NotEquals = 7,
     LessThan = 8,
     GreaterThan = 9,
+    LessEqual = 10,
+    GreaterEqual = 11,
+    And = 12,
 }

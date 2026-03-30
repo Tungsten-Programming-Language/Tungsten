@@ -228,13 +228,34 @@ impl TypeInference {
                     Operator::Equals
                     | Operator::NotEquals
                     | Operator::LessThan
-                    | Operator::GreaterThan => {
+                    | Operator::GreaterThan
+                    | Operator::LessEqual
+                    | Operator::GreaterEqual => {
                         // Both operands should have the same type
                         if left_type != right_type {
                             return Err(TypeError::TypeMismatch {
                                 expected: left_type.clone(),
                                 actual: right_type,
                                 context: "comparison operation".to_string(),
+                            });
+                        }
+                        Ok(Type::Bool)
+                    }
+
+                    // Logical AND operation
+                    Operator::And => {
+                        if left_type != Type::Bool {
+                            return Err(TypeError::TypeMismatch {
+                                expected: Type::Bool,
+                                actual: left_type,
+                                context: "logical AND operation".to_string(),
+                            });
+                        }
+                        if right_type != Type::Bool {
+                            return Err(TypeError::TypeMismatch {
+                                expected: Type::Bool,
+                                actual: right_type,
+                                context: "logical AND operation".to_string(),
                             });
                         }
                         Ok(Type::Bool)
