@@ -183,12 +183,15 @@ impl TypeInference {
                 Ok(Type::List(Box::new(first_type)))
             }
 
-            // Identifiers look up in environment
-            Expression::Identifier(name) => self
-                .env
-                .lookup(name)
-                .cloned()
-                .ok_or_else(|| TypeError::UndefinedIdentifier(name.clone())),
+            // Identifiers look up in environment or check for built-in constants
+            Expression::Identifier(name) => match name.as_str() {
+                "Pi" => Ok(Type::Float64),
+                _ => self
+                    .env
+                    .lookup(name)
+                    .cloned()
+                    .ok_or_else(|| TypeError::UndefinedIdentifier(name.clone())),
+            },
 
             // Binary operations
             Expression::BinaryOp {
@@ -330,6 +333,120 @@ impl TypeInference {
                                 }
                                 // Return type is the type of the initial value
                                 self.infer_expression(&arguments[1])
+                            }
+                            "Args" => {
+                                // Args[] returns List[String]
+                                Ok(Type::List(Box::new(Type::String)))
+                            }
+                            "Length" => {
+                                // Length[list] returns Int64
+                                if arguments.len() != 1 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 1,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::Int64)
+                            }
+                            "Sqrt" | "Sin" | "Cos" => {
+                                // Sqrt[x], Sin[x], Cos[x] return Float64
+                                if arguments.len() != 1 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 1,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::Float64)
+                            }
+                            "ParseInt" => {
+                                // ParseInt[s] returns Int64
+                                if arguments.len() != 1 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 1,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::Int64)
+                            }
+                            "Range" => {
+                                // Range[n] or Range[start, end] returns List[Int64]
+                                if arguments.is_empty() || arguments.len() > 2 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 1,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::List(Box::new(Type::Int64)))
+                            }
+                            "Nth" => {
+                                // Nth[list, i] returns element type (assume Int64 for now)
+                                if arguments.len() != 2 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 2,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::Int64)
+                            }
+                            "Set" => {
+                                // Set[list, i, v] returns modified list
+                                if arguments.len() != 3 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 3,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::List(Box::new(Type::Int64)))
+                            }
+                            "First" => {
+                                // First[list] returns first element
+                                if arguments.len() != 1 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 1,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::Int64)
+                            }
+                            "Rest" => {
+                                // Rest[list] returns tail of list
+                                if arguments.len() != 1 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 1,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::List(Box::new(Type::Int64)))
+                            }
+                            "Concat" => {
+                                // Concat[a, b] returns combined list
+                                if arguments.len() != 2 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 2,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::List(Box::new(Type::Int64)))
+                            }
+                            "Reverse" => {
+                                // Reverse[list] returns reversed list
+                                if arguments.len() != 1 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 1,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::List(Box::new(Type::Int64)))
                             }
                             _ => {
                                 // Check if it's a struct constructor

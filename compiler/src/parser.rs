@@ -172,17 +172,96 @@ impl Parser {
 
             if is_function_syntax {
                 // Try to parse as function call or definition
-                if let Some(func_or_call) = self.parse_function_or_call() {
-                    // Handle postfix ? on function call result
-                    let mut result = func_or_call;
-                    while matches!(&self.current_token, Some(Token::Question)) {
+                let func_or_call = self.parse_function_or_call()?;
+
+                // Continue to check for binary operators (comparison, arithmetic, etc.)
+                // This handles cases like: Length[list] == 0
+                let mut expr = func_or_call;
+
+                // Check for logical AND
+                while matches!(&self.current_token, Some(Token::And)) {
+                    let op = Operator::And;
+                    self.advance();
+                    let right = self.parse_comparison()?;
+                    expr = Expression::BinaryOp {
+                        left: Box::new(expr),
+                        operator: op,
+                        right: Box::new(right),
+                    };
+                }
+
+                // Check for comparison operators
+                if let Some(token) = &self.current_token {
+                    let op = match token {
+                        Token::Equals => Some(Operator::Equals),
+                        Token::NotEquals => Some(Operator::NotEquals),
+                        Token::LessThan => Some(Operator::LessThan),
+                        Token::GreaterThan => Some(Operator::GreaterThan),
+                        Token::LessEqual => Some(Operator::LessEqual),
+                        Token::GreaterEqual => Some(Operator::GreaterEqual),
+                        _ => None,
+                    };
+                    if let Some(op) = op {
                         self.advance();
-                        result = Expression::Propagate {
-                            expr: Box::new(result),
+                        let right = self.parse_additive()?;
+                        expr = Expression::BinaryOp {
+                            left: Box::new(expr),
+                            operator: op,
+                            right: Box::new(right),
                         };
                     }
-                    return Some(result);
                 }
+
+                // Check for additive operators
+                while let Some(token) = &self.current_token {
+                    let op = match token {
+                        Token::Plus => Some(Operator::Add),
+                        Token::Minus => Some(Operator::Subtract),
+                        _ => break,
+                    };
+                    if let Some(op) = op {
+                        self.advance();
+                        let right = self.parse_multiplicative()?;
+                        expr = Expression::BinaryOp {
+                            left: Box::new(expr),
+                            operator: op,
+                            right: Box::new(right),
+                        };
+                    } else {
+                        break;
+                    }
+                }
+
+                // Check for multiplicative operators
+                while let Some(token) = &self.current_token {
+                    let op = match token {
+                        Token::Multiply => Some(Operator::Multiply),
+                        Token::Divide => Some(Operator::Divide),
+                        _ => break,
+                    };
+                    if let Some(op) = op {
+                        self.advance();
+                        let right = self.parse_power()?;
+                        expr = Expression::BinaryOp {
+                            left: Box::new(expr),
+                            operator: op,
+                            right: Box::new(right),
+                        };
+                    } else {
+                        break;
+                    }
+                }
+
+                // Handle postfix ? on function call result
+                let mut result = expr;
+                while matches!(&self.current_token, Some(Token::Question)) {
+                    self.advance();
+                    result = Expression::Propagate {
+                        expr: Box::new(result),
+                    };
+                }
+
+                return Some(result);
             }
         }
 
@@ -484,7 +563,38 @@ impl Parser {
             Some(Token::Identifier(id)) => {
                 let expr = Expression::Identifier(id.clone());
                 self.advance();
-                Some(expr)
+
+                // Check if this is a function call (identifier followed by [)
+                if matches!(&self.current_token, Some(Token::LeftBracket)) {
+                    self.advance();
+
+                    // Parse arguments
+                    let mut arguments = Vec::new();
+                    while !matches!(&self.current_token, Some(Token::RightBracket)) {
+                        if matches!(&self.current_token, Some(Token::Comma)) {
+                            self.advance();
+                            continue;
+                        }
+                        if let Some(arg) = self.parse_expression() {
+                            arguments.push(arg);
+                        } else {
+                            return None;
+                        }
+                    }
+
+                    // Consume closing bracket
+                    match &self.current_token {
+                        Some(Token::RightBracket) => self.advance(),
+                        _ => return None,
+                    }
+
+                    Some(Expression::FunctionCall {
+                        function: Box::new(expr),
+                        arguments,
+                    })
+                } else {
+                    Some(expr)
+                }
             }
             Some(Token::LeftParen) => self.parse_tuple(),
             Some(Token::LeftBracket) => self.parse_list(),

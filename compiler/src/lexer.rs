@@ -344,8 +344,25 @@ impl Lexer {
                 }
             }
             c if c.is_digit(10) => {
-                // Handle numeric literals
-                Some(Token::Number(self.read_number()))
+                // Handle numeric literals (integers and floats)
+                let mut number = String::new();
+                while self.position < self.input.len() && self.input[self.position].is_digit(10) {
+                    number.push(self.input[self.position]);
+                    self.position += 1;
+                }
+                // Check for decimal point
+                if self.position < self.input.len() && self.input[self.position] == '.' {
+                    number.push('.');
+                    self.position += 1;
+                    while self.position < self.input.len() && self.input[self.position].is_digit(10)
+                    {
+                        number.push(self.input[self.position]);
+                        self.position += 1;
+                    }
+                    Some(Token::Float(number.parse().unwrap_or(0.0)))
+                } else {
+                    Some(Token::Number(number.parse().unwrap_or(0)))
+                }
             }
             // Unrecognized character
             _ => None,
@@ -396,15 +413,6 @@ impl Lexer {
             self.position += 1;
         }
         identifier
-    }
-
-    fn read_number(&mut self) -> i32 {
-        let mut number = String::new();
-        while self.position < self.input.len() && self.input[self.position].is_digit(10) {
-            number.push(self.input[self.position]);
-            self.position += 1;
-        }
-        number.parse().unwrap_or(0)
     }
 
     fn read_string(&mut self) -> String {

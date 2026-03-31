@@ -297,7 +297,7 @@ impl RustCodeGenerator {
     /// Infer return type from expression
     fn infer_return_type(&self, expr: &Expression, parameters: &[TypeAnnotation]) -> String {
         match expr {
-            Expression::Number(_) => "i32".to_string(), // Default to i32 like Rust
+            Expression::Number(_) => "i64".to_string(), // Default to i64 for benchmarks
             Expression::Float(_) => "f64".to_string(),
             Expression::String(_) => "String".to_string(),
             Expression::Boolean(_) => "bool".to_string(),
@@ -355,6 +355,13 @@ impl RustCodeGenerator {
                             "i32".to_string() // Default
                         }
                     }
+                    Operator::Equals
+                    | Operator::NotEquals
+                    | Operator::LessThan
+                    | Operator::GreaterThan
+                    | Operator::LessEqual
+                    | Operator::GreaterEqual => "bool".to_string(),
+                    Operator::And => "bool".to_string(),
                     _ => "i32".to_string(),
                 }
             }
@@ -380,6 +387,50 @@ impl RustCodeGenerator {
                 // Return type is the type of the body expression
                 self.infer_return_type(body, parameters)
             }
+            Expression::Cond {
+                conditions,
+                default_statements,
+            } => {
+                // Infer return type from first condition's body (all branches should have same type)
+                if !conditions.is_empty() {
+                    self.infer_return_type(&conditions[0].1, parameters)
+                } else if let Some(default) = default_statements {
+                    self.infer_return_type(default, parameters)
+                } else {
+                    "()".to_string()
+                }
+            }
+            Expression::FunctionCall {
+                function,
+                arguments,
+            } => match function.as_ref() {
+                Expression::Identifier(name) => match name.as_str() {
+                    "First" => "i64".to_string(),
+                    "Rest" | "Reverse" | "Concat" | "Range" => "Vec<i64>".to_string(),
+                    "Length" => "usize".to_string(),
+                    "Nth" => "i64".to_string(),
+                    "Set" => "Vec<i64>".to_string(),
+                    "Sqrt" | "Sin" | "Cos" => "f64".to_string(),
+                    "ParseInt" => "i64".to_string(),
+                    "Args" => "Vec<String>".to_string(),
+                    "Map" | "Filter" => {
+                        if arguments.len() >= 2 {
+                            self.infer_return_type(&arguments[1], parameters)
+                        } else {
+                            "Vec<i64>".to_string()
+                        }
+                    }
+                    "Fold" => {
+                        if arguments.len() >= 2 {
+                            self.infer_return_type(&arguments[1], parameters)
+                        } else {
+                            "()".to_string()
+                        }
+                    }
+                    _ => "()".to_string(),
+                },
+                _ => "()".to_string(),
+            },
             _ => "()".to_string(),
         }
     }
@@ -410,9 +461,15 @@ impl RustCodeGenerator {
                                         Expression::FunctionCall { function, .. } => {
                                             match function.as_ref() {
                                                 Expression::Identifier(name) => {
-                                                    // Check if it's Map/Filter or a struct constructor
+                                                    // Check if it returns a Vec type (needs debug format)
                                                     if name == "Map"
                                                         || name == "Filter"
+                                                        || name == "Args"
+                                                        || name == "Range"
+                                                        || name == "Reverse"
+                                                        || name == "Concat"
+                                                        || name == "Rest"
+                                                        || name == "Set"
                                                         || self
                                                             .struct_definitions
                                                             .contains_key(name)
@@ -466,16 +523,16 @@ impl RustCodeGenerator {
             }
             Expression::Number(n) => Ok(n.to_string()),
 
-            Expression::Float(f) => Ok(f.to_string()),
+            Expression::Float(f) => Ok(format!("{}f64", f)),
 
             Expression::String(s) => Ok(format!("\"{}\".to_string()", s)),
 
             Expression::Boolean(b) => Ok(b.to_string()),
 
-            Expression::Identifier(name) => {
-                // Convert to snake_case
-                Ok(to_snake_case(name))
-            }
+            Expression::Identifier(name) => match name.as_str() {
+                "Pi" => Ok("std::f64::consts::PI".to_string()),
+                _ => Ok(to_snake_case(name)),
+            },
 
             Expression::Tuple(elements) => {
                 // Generate tuple: (elem1, elem2, ...)
@@ -699,9 +756,15 @@ impl RustCodeGenerator {
                                                 Expression::FunctionCall { function, .. } => {
                                                     match function.as_ref() {
                                                         Expression::Identifier(name) => {
-                                                            // Check if it's Map/Filter or a struct constructor
+                                                            // Check if it returns a Vec type (needs debug format)
                                                             if name == "Map"
                                                                 || name == "Filter"
+                                                                || name == "Args"
+                                                                || name == "Range"
+                                                                || name == "Reverse"
+                                                                || name == "Concat"
+                                                                || name == "Rest"
+                                                                || name == "Set"
                                                                 || self
                                                                     .struct_definitions
                                                                     .contains_key(name)
@@ -731,6 +794,125 @@ impl RustCodeGenerator {
                                 self.indent_level -= 1;
                                 result.push_str(&format!("{}}}", self.indent()));
                                 Ok(result)
+                            }
+                            "Args" => {
+                                // Args[] -> std::env::args().skip(1).collect::<Vec<String>>()
+                                Ok("std::env::args().skip(1).collect::<Vec<String>>()".to_string())
+                            }
+                            "Length" => {
+                                // Length[list] -> list.len()
+                                if arguments.len() != 1 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list = self.generate_expression_value(&arguments[0])?;
+                                Ok(format!("{}.len()", list))
+                            }
+                            "Sqrt" => {
+                                // Sqrt[x] -> x.sqrt()
+                                if arguments.len() != 1 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let x = self.generate_expression_value(&arguments[0])?;
+                                Ok(format!("({}).sqrt()", x))
+                            }
+                            "Sin" => {
+                                // Sin[x] -> x.sin()
+                                if arguments.len() != 1 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let x = self.generate_expression_value(&arguments[0])?;
+                                Ok(format!("({}).sin()", x))
+                            }
+                            "Cos" => {
+                                // Cos[x] -> x.cos()
+                                if arguments.len() != 1 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let x = self.generate_expression_value(&arguments[0])?;
+                                Ok(format!("({}).cos()", x))
+                            }
+                            "ParseInt" => {
+                                // ParseInt[s] -> s.parse::<i64>().unwrap()
+                                if arguments.len() != 1 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let s = self.generate_expression_value(&arguments[0])?;
+                                Ok(format!("{}.parse::<i64>().unwrap()", s))
+                            }
+                            "Range" => {
+                                // Range[n] -> (1..=n).collect::<Vec<i64>>()
+                                // or Range[start, end] -> (start..=end).collect::<Vec<i64>>()
+                                match arguments.len() {
+                                    1 => {
+                                        let n = self.generate_expression_value(&arguments[0])?;
+                                        Ok(format!("(1..={}).collect::<Vec<i64>>()", n))
+                                    }
+                                    2 => {
+                                        let start =
+                                            self.generate_expression_value(&arguments[0])?;
+                                        let end = self.generate_expression_value(&arguments[1])?;
+                                        Ok(format!("({}..={}).collect::<Vec<i64>>()", start, end))
+                                    }
+                                    _ => Err(std::fmt::Error),
+                                }
+                            }
+                            "Nth" => {
+                                // Nth[list, i] -> list[i as usize]
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list = self.generate_expression_value(&arguments[0])?;
+                                let idx = self.generate_expression_value(&arguments[1])?;
+                                Ok(format!("{}[{} as usize]", list, idx))
+                            }
+                            "Set" => {
+                                // Set[list, i, v] -> { let mut l = list; l[i as usize] = v; l }
+                                if arguments.len() != 3 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list = self.generate_expression_value(&arguments[0])?;
+                                let idx = self.generate_expression_value(&arguments[1])?;
+                                let val = self.generate_expression_value(&arguments[2])?;
+                                Ok(format!(
+                                    "{{ let mut l = {}; l[{} as usize] = {}; l }}",
+                                    list, idx, val
+                                ))
+                            }
+                            "First" => {
+                                // First[list] -> list[0]
+                                if arguments.len() != 1 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list = self.generate_expression_value(&arguments[0])?;
+                                Ok(format!("{}[0]", list))
+                            }
+                            "Rest" => {
+                                // Rest[list] -> list[1..].to_vec()
+                                if arguments.len() != 1 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list = self.generate_expression_value(&arguments[0])?;
+                                Ok(format!("{}[1..].to_vec()", list))
+                            }
+                            "Concat" => {
+                                // Concat[a, b] -> [a, b].concat() or a.into_iter().chain(b).collect()
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let a = self.generate_expression_value(&arguments[0])?;
+                                let b = self.generate_expression_value(&arguments[1])?;
+                                Ok(format!(
+                                    "{}.into_iter().chain({}).collect::<Vec<_>>()",
+                                    a, b
+                                ))
+                            }
+                            "Reverse" => {
+                                // Reverse[list] -> list.into_iter().rev().collect::<Vec<_>>()
+                                if arguments.len() != 1 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list = self.generate_expression_value(&arguments[0])?;
+                                Ok(format!("{}.into_iter().rev().collect::<Vec<_>>()", list))
                             }
                             _ => {
                                 // Check if this is a struct constructor
