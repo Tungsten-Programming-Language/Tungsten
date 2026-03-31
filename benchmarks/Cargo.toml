@@ -1,0 +1,11 @@
+[package]
+name = "benchmarks"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+w = { path = "../compiler" }
+
+[lib]
+name = "benchmarks"
+path = "lib.rs"
