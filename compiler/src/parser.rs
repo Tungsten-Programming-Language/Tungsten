@@ -7,7 +7,7 @@
 //! The parser works closely with the lexer to transform source code into a structured representation
 //! that can be further processed by other compiler stages like type checking or code generation.
 
-use crate::ast::{Expression, LogLevel, Operator, Pattern, Type, TypeAnnotation};
+use crate::ast::{Expression, LogLevel, Operator, Pattern, Type, TypeAnnotation, UnaryOperator};
 use crate::lexer::{Lexer, Token};
 
 /// Helper enum to distinguish between function arguments and parameters during parsing
@@ -372,6 +372,7 @@ impl Parser {
         while let Some(token) = &self.current_token {
             let operator = match token {
                 Token::And => Operator::And,
+                Token::Or => Operator::Or,
                 _ => break,
             };
 
@@ -478,6 +479,15 @@ impl Parser {
                 left: Box::new(Expression::Number(0)),
                 operator: Operator::Subtract,
                 right: Box::new(operand),
+            });
+        }
+
+        if matches!(&self.current_token, Some(Token::Not)) {
+            self.advance();
+            let operand = self.parse_power()?;
+            return Some(Expression::UnaryOp {
+                operator: UnaryOperator::Not,
+                operand: Box::new(operand),
             });
         }
 

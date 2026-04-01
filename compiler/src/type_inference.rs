@@ -3,7 +3,7 @@
 //! Performs type inference and type checking on the W language AST.
 //! This runs after parsing and before code generation.
 
-use crate::ast::{Expression, Operator, Pattern, Type, TypeAnnotation};
+use crate::ast::{Expression, Operator, Pattern, Type, TypeAnnotation, UnaryOperator};
 use std::collections::HashMap;
 use std::fmt;
 
@@ -245,20 +245,38 @@ impl TypeInference {
                         Ok(Type::Bool)
                     }
 
-                    // Logical AND operation
-                    Operator::And => {
+                    // Logical AND/OR operations
+                    Operator::And | Operator::Or => {
                         if left_type != Type::Bool {
                             return Err(TypeError::TypeMismatch {
                                 expected: Type::Bool,
                                 actual: left_type,
-                                context: "logical AND operation".to_string(),
+                                context: format!("logical {:?} operation", operator),
                             });
                         }
                         if right_type != Type::Bool {
                             return Err(TypeError::TypeMismatch {
                                 expected: Type::Bool,
                                 actual: right_type,
-                                context: "logical AND operation".to_string(),
+                                context: format!("logical {:?} operation", operator),
+                            });
+                        }
+                        Ok(Type::Bool)
+                    }
+                }
+            }
+
+            // Unary operations
+            Expression::UnaryOp { operator, operand } => {
+                let operand_type = self.infer_expression(operand)?;
+
+                match operator {
+                    UnaryOperator::Not => {
+                        if operand_type != Type::Bool {
+                            return Err(TypeError::TypeMismatch {
+                                expected: Type::Bool,
+                                actual: operand_type,
+                                context: "logical NOT operation".to_string(),
                             });
                         }
                         Ok(Type::Bool)
@@ -447,6 +465,73 @@ impl TypeInference {
                                     });
                                 }
                                 Ok(Type::List(Box::new(Type::Int64)))
+                            }
+                            "Take" => {
+                                // Take[n, list] returns list of same type
+                                if arguments.len() != 2 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 2,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                // Infer element type from list argument
+                                let list_type = self.infer_expression(&arguments[1])?;
+                                match list_type {
+                                    Type::List(elem_type) => Ok(Type::List(elem_type)),
+                                    _ => Ok(Type::List(Box::new(Type::Int64))),
+                                }
+                            }
+                            "Zip" => {
+                                // Zip[list1, list2] returns list of tuples
+                                if arguments.len() != 2 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 2,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                let list1_type = self.infer_expression(&arguments[0])?;
+                                let list2_type = self.infer_expression(&arguments[1])?;
+                                let elem1_type = match list1_type {
+                                    Type::List(t) => *t,
+                                    _ => Type::Int64,
+                                };
+                                let elem2_type = match list2_type {
+                                    Type::List(t) => *t,
+                                    _ => Type::Int64,
+                                };
+                                Ok(Type::List(Box::new(Type::Tuple(vec![
+                                    elem1_type, elem2_type,
+                                ]))))
+                            }
+                            "FlatMap" => {
+                                // FlatMap[fn, list] returns flattened list
+                                if arguments.len() != 2 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 2,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                // The return type depends on what the lambda returns
+                                // For simplicity, assume it returns List<Int64>
+                                Ok(Type::List(Box::new(Type::Int64)))
+                            }
+                            "GroupBy" => {
+                                // GroupBy[key_fn, list] returns Map<K, List<V>>
+                                if arguments.len() != 2 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 2,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                // Return type is HashMap<K, Vec<V>>
+                                Ok(Type::Map(
+                                    Box::new(Type::Int64),
+                                    Box::new(Type::List(Box::new(Type::Int64))),
+                                ))
                             }
                             _ => {
                                 // Check if it's a struct constructor

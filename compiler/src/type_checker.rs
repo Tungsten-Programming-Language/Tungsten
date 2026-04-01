@@ -1,4 +1,4 @@
-use crate::ast::{Expression, Operator, Type};
+use crate::ast::{Expression, Operator, Type, UnaryOperator};
 
 #[derive(Debug)]
 pub enum TypeError {
@@ -49,6 +49,9 @@ impl TypeChecker {
                 operator,
                 right,
             } => self.check_binary_operation(left, *operator, right),
+            Expression::UnaryOp { operator, operand } => {
+                self.check_unary_operation(*operator, operand)
+            }
             Expression::LogCall { level: _, message } => {
                 // Log function always returns void/unit type
                 self.check(message)?;
@@ -193,7 +196,7 @@ impl TypeChecker {
                     })
                 }
             }
-            Operator::And => {
+            Operator::And | Operator::Or => {
                 if left_type == Type::Bool && right_type == Type::Bool {
                     Ok(Type::Bool)
                 } else {
@@ -204,6 +207,27 @@ impl TypeChecker {
                         } else {
                             right_type
                         },
+                    })
+                }
+            }
+        }
+    }
+
+    fn check_unary_operation(
+        &mut self,
+        operator: UnaryOperator,
+        operand: &Expression,
+    ) -> Result<Type, TypeError> {
+        let operand_type = self.check(operand)?;
+
+        match operator {
+            UnaryOperator::Not => {
+                if operand_type == Type::Bool {
+                    Ok(Type::Bool)
+                } else {
+                    Err(TypeError::TypeMismatch {
+                        expected: Type::Bool,
+                        found: operand_type,
                     })
                 }
             }

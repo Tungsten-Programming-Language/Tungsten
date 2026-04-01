@@ -16,8 +16,55 @@ A functional programming language that transpiles to Rust with Wolfram Language-
 - **Pattern matching**: `Match[value, [Some[x], x], [None, 0]]`
 - **Structs**: `Struct[Point, [x: Int32, y: Int32]]`
 - **Loops**: `Do[body, {i, n}]`, `While[cond, body]`, `Break[]`, `Continue[]`
-- **Higher-order functions**: `Map[f, list]`, `Filter[f, list]`, `Fold[f, init, list]`
+- **Higher-order functions**: `Map[f, list]`, `Filter[f, list]`, `Fold[f, init, list]`, `FlatMap[f, list]`, `Take[n, list]`, `Zip[list1, list2]`, `GroupBy[key_fn, list]`
 - **Logging**: `LogDebug[msg]`, `LogInfo[msg]`, `LogWarn[msg]`, `LogError[msg]`
+
+## Primitive Operators
+
+### Arithmetic
+| Operator | Syntax | Description |
+|----------|--------|-------------|
+| `+` | `a + b` | Addition |
+| `-` | `a - b` | Subtraction |
+| `*` | `a * b` | Multiplication |
+| `/` | `a / b` | Division |
+| `^` | `a ^ b` | Power (exponentiation) |
+
+### Comparison
+| Operator | Syntax | Description |
+|----------|--------|-------------|
+| `==` | `a == b` | Equality |
+| `!=` | `a != b` | Inequality |
+| `<` | `a < b` | Less than |
+| `>` | `a > b` | Greater than |
+| `<=` | `a <= b` | Less than or equal |
+| `>=` | `a >= b` | Greater than or equal |
+
+### Logical
+| Operator | Syntax | Description |
+|----------|--------|-------------|
+| `&&` | `a && b` | Logical AND (short-circuit) |
+| `\|\|` | `a \|\| b` | Logical OR (short-circuit) |
+| `!` | `!a` | Logical NOT |
+
+### Special
+| Operator | Syntax | Description |
+|----------|--------|-------------|
+| `\|>` | `x \|> f` | Pipe (passes left as last arg to right) |
+| `->` | `x -> body` | Lambda shorthand |
+| `?` | `expr?` | Error propagation (unwrap Option/Result) |
+
+### Operator Precedence (lowest to highest)
+1. `\|>` (pipe, left-associative)
+2. `&&` (logical AND)
+3. `\|\|` (logical OR)
+4. `==`, `!=`, `<`, `>`, `<=`, `>=` (comparison)
+5. `+`, `-` (additive)
+6. `*`, `/` (multiplicative)
+7. `^` (power, right-associative)
+8. `?` (propagate, unary postfix)
+9. `!` (logical NOT, unary prefix)
+10. `-` (unary minus)
 
 ## Types
 

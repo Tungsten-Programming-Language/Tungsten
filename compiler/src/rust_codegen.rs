@@ -2,7 +2,7 @@
 //!
 //! Translates the W language AST into idiomatic Rust source code
 
-use crate::ast::{Expression, LogLevel, Operator, Pattern, Type, TypeAnnotation};
+use crate::ast::{Expression, LogLevel, Operator, Pattern, Type, TypeAnnotation, UnaryOperator};
 use std::collections::HashMap;
 use std::fmt::Write;
 
@@ -361,10 +361,16 @@ impl RustCodeGenerator {
                     | Operator::GreaterThan
                     | Operator::LessEqual
                     | Operator::GreaterEqual => "bool".to_string(),
-                    Operator::And => "bool".to_string(),
+                    Operator::And | Operator::Or => "bool".to_string(),
                     _ => "i32".to_string(),
                 }
             }
+            Expression::UnaryOp {
+                operator,
+                operand: _,
+            } => match operator {
+                UnaryOperator::Not => "bool".to_string(),
+            },
             // Error handling types
             Expression::None => "Option<()>".to_string(), // Type needs context
             Expression::Some { value } => {
@@ -417,13 +423,22 @@ impl RustCodeGenerator {
                     "Sqrt" | "Sin" | "Cos" => "f64".to_string(),
                     "ParseInt" => "i64".to_string(),
                     "Args" => "Vec<String>".to_string(),
-                    "Map" | "Filter" => {
+                    "Map" | "Filter" | "Take" => {
                         if arguments.len() >= 2 {
                             self.infer_return_type(&arguments[1], parameters)
                         } else {
                             "Vec<i64>".to_string()
                         }
                     }
+                    "FlatMap" => {
+                        if arguments.len() >= 2 {
+                            self.infer_return_type(&arguments[1], parameters)
+                        } else {
+                            "Vec<i64>".to_string()
+                        }
+                    }
+                    "Zip" => "Vec<(i64, i64)>".to_string(),
+                    "GroupBy" => "std::collections::HashMap<i64, Vec<i64>>".to_string(),
                     "Fold" => {
                         if arguments.len() >= 2 {
                             self.infer_return_type(&arguments[1], parameters)
@@ -474,6 +489,10 @@ impl RustCodeGenerator {
                                                         || name == "Concat"
                                                         || name == "Rest"
                                                         || name == "Set"
+                                                        || name == "Take"
+                                                        || name == "Zip"
+                                                        || name == "FlatMap"
+                                                        || name == "GroupBy"
                                                         || self
                                                             .struct_definitions
                                                             .contains_key(name)
@@ -624,6 +643,14 @@ impl RustCodeGenerator {
                     Operator::LessEqual => Ok(format!("({} <= {})", left_val, right_val)),
                     Operator::GreaterEqual => Ok(format!("({} >= {})", left_val, right_val)),
                     Operator::And => Ok(format!("({} && {})", left_val, right_val)),
+                    Operator::Or => Ok(format!("({} || {})", left_val, right_val)),
+                }
+            }
+
+            Expression::UnaryOp { operator, operand } => {
+                let operand_val = self.generate_expression_value(operand)?;
+                match operator {
+                    UnaryOperator::Not => Ok(format!("(!{})", operand_val)),
                 }
             }
 
@@ -769,6 +796,10 @@ impl RustCodeGenerator {
                                                                 || name == "Concat"
                                                                 || name == "Rest"
                                                                 || name == "Set"
+                                                                || name == "Take"
+                                                                || name == "Zip"
+                                                                || name == "FlatMap"
+                                                                || name == "GroupBy"
                                                                 || self
                                                                     .struct_definitions
                                                                     .contains_key(name)
@@ -917,6 +948,86 @@ impl RustCodeGenerator {
                                 }
                                 let list = self.generate_expression_value(&arguments[0])?;
                                 Ok(format!("{}.into_iter().rev().collect::<Vec<_>>()", list))
+                            }
+                            "Take" => {
+                                // Take[n, list] -> list.into_iter().take(n as usize).collect::<Vec<_>>()
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let n = self.generate_expression_value(&arguments[0])?;
+                                let list = self.generate_expression_value(&arguments[1])?;
+                                Ok(format!(
+                                    "{}.into_iter().take({} as usize).collect::<Vec<_>>()",
+                                    list, n
+                                ))
+                            }
+                            "Zip" => {
+                                // Zip[list1, list2] -> list1.into_iter().zip(list2.into_iter()).collect::<Vec<_>>()
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list1 = self.generate_expression_value(&arguments[0])?;
+                                let list2 = self.generate_expression_value(&arguments[1])?;
+                                Ok(format!(
+                                    "{}.into_iter().zip({}.into_iter()).collect::<Vec<_>>()",
+                                    list1, list2
+                                ))
+                            }
+                            "FlatMap" => {
+                                // FlatMap[function, list] -> list.into_iter().flat_map(|x| function(x)).collect::<Vec<_>>()
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list = self.generate_expression_value(&arguments[1])?;
+                                match &arguments[0] {
+                                    Expression::Lambda { parameters, body } => {
+                                        if parameters.len() == 1 {
+                                            let param = &to_snake_case(&parameters[0].name);
+                                            let body_str = self.generate_expression_value(body)?;
+                                            Ok(format!(
+                                                "{}.into_iter().flat_map(|{}| {}).collect::<Vec<_>>()",
+                                                list, param, body_str
+                                            ))
+                                        } else {
+                                            Err(std::fmt::Error)
+                                        }
+                                    }
+                                    _ => {
+                                        let func = self.generate_expression_value(&arguments[0])?;
+                                        Ok(format!(
+                                            "{}.into_iter().flat_map({}).collect::<Vec<_>>()",
+                                            list, func
+                                        ))
+                                    }
+                                }
+                            }
+                            "GroupBy" => {
+                                // GroupBy[key_fn, list] -> fold into HashMap<K, Vec<T>>
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list = self.generate_expression_value(&arguments[1])?;
+                                match &arguments[0] {
+                                    Expression::Lambda { parameters, body } => {
+                                        if parameters.len() == 1 {
+                                            let param = &to_snake_case(&parameters[0].name);
+                                            let body_str = self.generate_expression_value(body)?;
+                                            Ok(format!(
+                                                "{}.into_iter().fold(std::collections::HashMap::new(), |mut acc, {}| {{ let key = {}; acc.entry(key).or_insert_with(Vec::new).push({}); acc }})",
+                                                list, param, body_str, param
+                                            ))
+                                        } else {
+                                            Err(std::fmt::Error)
+                                        }
+                                    }
+                                    _ => {
+                                        let func = self.generate_expression_value(&arguments[0])?;
+                                        Ok(format!(
+                                            "{}.into_iter().fold(std::collections::HashMap::new(), |mut acc, x| {{ let key = {}(x); acc.entry(key).or_insert_with(Vec::new).push(x); acc }})",
+                                            list, func
+                                        ))
+                                    }
+                                }
                             }
                             _ => {
                                 // Check if this is a struct constructor

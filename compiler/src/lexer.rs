@@ -75,6 +75,10 @@ pub enum Token {
     GreaterEqual,
     /// Logical AND operator `&&`
     And,
+    /// Logical OR operator `||`
+    Or,
+    /// Logical NOT operator `!`
+    Not,
 
     /// Pipe operator `|>`
     Pipe,
@@ -267,8 +271,7 @@ impl Lexer {
                     self.position += 1;
                     Some(Token::NotEquals)
                 } else {
-                    // Single ! is not a token in this language
-                    None
+                    Some(Token::Not)
                 }
             }
             '<' => {
@@ -304,10 +307,13 @@ impl Lexer {
             }
             '|' => {
                 self.position += 1;
-                // Check for |>
+                // Check for |> or ||
                 if self.position < self.input.len() && self.input[self.position] == '>' {
                     self.position += 1;
                     Some(Token::Pipe)
+                } else if self.position < self.input.len() && self.input[self.position] == '|' {
+                    self.position += 1;
+                    Some(Token::Or)
                 } else {
                     // Single | is not a token in this language
                     None

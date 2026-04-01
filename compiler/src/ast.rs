@@ -113,6 +113,10 @@ pub enum Expression {
         operator: Operator,
         right: Box<Expression>,
     },
+    UnaryOp {
+        operator: UnaryOperator,
+        operand: Box<Expression>,
+    },
     LogCall {
         level: LogLevel,
         message: Box<Expression>,
@@ -245,4 +249,11 @@ pub enum Operator {
     LessEqual = 10,
     GreaterEqual = 11,
     And = 12,
+    Or = 13,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
+pub enum UnaryOperator {
+    Not,
 }
