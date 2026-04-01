@@ -162,6 +162,30 @@ impl Parser {
                 return self.parse_struct_definition();
             }
 
+            // Special handling for Do - loop construct
+            if id == "Do" {
+                self.advance();
+                return self.parse_do_expression();
+            }
+
+            // Special handling for While - while loop construct
+            if id == "While" {
+                self.advance();
+                return self.parse_while_expression();
+            }
+
+            // Special handling for Break - loop exit
+            if id == "Break" {
+                self.advance();
+                return self.parse_break_expression();
+            }
+
+            // Special handling for Continue - loop continue
+            if id == "Continue" {
+                self.advance();
+                return self.parse_continue_expression();
+            }
+
             // Peek ahead to check if next token is LeftBracket
             // We need to check this to avoid consuming tokens unnecessarily
             let is_function_syntax = self
@@ -928,6 +952,221 @@ impl Parser {
             name: struct_name,
             fields,
         })
+    }
+
+    /// Parses a Do loop expression with the structure:
+    /// Do[body, n]                      - iterate n times (no variable)
+    /// Do[body, {n}]                    - iterate n times (no variable)
+    /// Do[body, {i, imax}]              - iterate i from 1 to imax
+    /// Do[body, {i, imin, imax}]        - iterate i from imin to imax
+    /// Do[body, {i, imin, imax, di}]    - iterate with step di
+    ///
+    /// # Returns
+    /// - `Some(Expression::Do)` if parsing succeeds
+    /// - `None` if parsing fails
+    fn parse_do_expression(&mut self) -> Option<Expression> {
+        // Expect left bracket for Do
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Parse body expression
+        let body = Box::new(self.parse_expression()?);
+
+        // Expect comma after body
+        match self.current_token {
+            Some(Token::Comma) => self.advance(),
+            _ => return None,
+        }
+
+        // Check if next is a number (simple Do[body, n] form) or left brace
+        match &self.current_token {
+            Some(Token::Number(n)) => {
+                // Do[body, n] - simple iteration without variable
+                let end = Box::new(Expression::Number(*n));
+                self.advance();
+
+                // Consume right bracket of Do
+                match self.current_token {
+                    Some(Token::RightBracket) => self.advance(),
+                    _ => return None,
+                }
+
+                return Some(Expression::Do {
+                    body,
+                    var: None,
+                    start: None,
+                    end,
+                    step: None,
+                });
+            }
+            Some(Token::LeftBrace) => {
+                // Do[body, {iterator_spec}]
+                self.advance();
+            }
+            _ => return None,
+        }
+
+        // Parse the iterator specification
+        // Could be: {n}, {i, imax}, {i, imin, imax}, {i, imin, imax, di}
+        let first = self.parse_expression()?;
+
+        let (var, start, end, step) = match self.current_token {
+            Some(Token::RightBrace) => {
+                // Just {n} - no loop variable
+                self.advance();
+                (None, None, Box::new(first), None)
+            }
+            Some(Token::Comma) => {
+                self.advance();
+                // First is the loop variable name
+                let var_name = match first {
+                    Expression::Identifier(name) => name,
+                    _ => return None,
+                };
+
+                // Parse imin or imax
+                let second = self.parse_expression()?;
+
+                match self.current_token {
+                    Some(Token::RightBrace) => {
+                        // {i, imax} - start from 1
+                        self.advance();
+                        (Some(var_name), None, Box::new(second), None)
+                    }
+                    Some(Token::Comma) => {
+                        self.advance();
+                        // Parse imax
+                        let third = self.parse_expression()?;
+
+                        match self.current_token {
+                            Some(Token::RightBrace) => {
+                                // {i, imin, imax}
+                                self.advance();
+                                (
+                                    Some(var_name),
+                                    Some(Box::new(second)),
+                                    Box::new(third),
+                                    None,
+                                )
+                            }
+                            Some(Token::Comma) => {
+                                self.advance();
+                                // Parse step
+                                let fourth = self.parse_expression()?;
+
+                                // Expect right brace
+                                match self.current_token {
+                                    Some(Token::RightBrace) => self.advance(),
+                                    _ => return None,
+                                };
+
+                                (
+                                    Some(var_name),
+                                    Some(Box::new(second)),
+                                    Box::new(third),
+                                    Some(Box::new(fourth)),
+                                )
+                            }
+                            _ => return None,
+                        }
+                    }
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        };
+
+        // Consume right bracket of Do
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::Do {
+            body,
+            var,
+            start,
+            end,
+            step,
+        })
+    }
+
+    /// Parses a While loop expression with the structure:
+    /// While[condition, body]
+    ///
+    /// # Returns
+    /// - `Some(Expression::While)` if parsing succeeds
+    /// - `None` if parsing fails
+    fn parse_while_expression(&mut self) -> Option<Expression> {
+        // Expect left bracket for While
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Parse condition expression
+        let condition = Box::new(self.parse_expression()?);
+
+        // Expect comma after condition
+        match self.current_token {
+            Some(Token::Comma) => self.advance(),
+            _ => return None,
+        }
+
+        // Parse body expression
+        let body = Box::new(self.parse_expression()?);
+
+        // Consume right bracket of While
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::While { condition, body })
+    }
+
+    /// Parses a Break expression: Break[]
+    ///
+    /// # Returns
+    /// - `Some(Expression::Break)` if parsing succeeds
+    /// - `None` if parsing fails
+    fn parse_break_expression(&mut self) -> Option<Expression> {
+        // Expect left bracket
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Expect right bracket
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::Break)
+    }
+
+    /// Parses a Continue expression: Continue[]
+    ///
+    /// # Returns
+    /// - `Some(Expression::Continue)` if parsing succeeds
+    /// - `None` if parsing fails
+    fn parse_continue_expression(&mut self) -> Option<Expression> {
+        // Expect left bracket
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Expect right bracket
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::Continue)
     }
 
     /// Parses a With expression with the structure:

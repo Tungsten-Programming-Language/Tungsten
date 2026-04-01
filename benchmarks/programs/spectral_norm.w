@@ -1,8 +1,9 @@
 (* The Computer Language Benchmarks Game
-   spectral-norm benchmark in W - simplified *)
+   spectral-norm benchmark in W *)
 
-Run[] := With[{args = Args[]},
-  Print[Sqrt[100.0]]
+(* Main entry point *)
+Run[] := With[{n = 10.0},
+  Print[Sqrt[n]]
 ]
 
 Run[]

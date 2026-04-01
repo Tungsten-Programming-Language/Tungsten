@@ -189,6 +189,35 @@ pub enum Expression {
         bindings: Vec<(String, Expression)>,
         body: Box<Expression>,
     },
+
+    /// Do loop - iterate a fixed number of times
+    /// Structure: Do[body, {n}] or Do[body, {i, imax}] or Do[body, {i, imin, imax}]
+    /// Transpiles to Rust for loop
+    Do {
+        body: Box<Expression>,
+        var: Option<String>,
+        start: Option<Box<Expression>>,
+        end: Box<Expression>,
+        step: Option<Box<Expression>>,
+    },
+
+    /// While loop - iterate while condition is true
+    /// Structure: While[condition, body]
+    /// Transpiles to Rust while loop
+    While {
+        condition: Box<Expression>,
+        body: Box<Expression>,
+    },
+
+    /// Break - exit from a loop
+    /// Structure: Break[]
+    /// Transpiles to Rust break
+    Break,
+
+    /// Continue - skip to next iteration of a loop
+    /// Structure: Continue[]
+    /// Transpiles to Rust continue
+    Continue,
 }
 
 #[derive(Debug, Clone, PartialEq)]

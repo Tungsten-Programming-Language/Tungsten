@@ -499,4 +499,144 @@ mod tests {
             _ => panic!("Expected less than"),
         }
     }
+
+    #[test]
+    fn test_benchmark_style() {
+        let input = r#"
+CountNodes[depth: Int32] := 
+  Cond[
+    [depth <= 0 1]
+    [true 1 + 2 * CountNodes[depth - 1]]
+  ]
+
+CountNodes[5]
+"#;
+        let mut parser = Parser::new(input.to_string());
+        let result = parser.parse();
+        assert!(result.is_some(), "Parse failed");
+    }
+
+    #[test]
+    fn test_binary_trees_simple() {
+        let input = r#"
+CountNodes[depth: Int32] := 
+  Cond[
+    [depth <= 0 1]
+    [true 1 + 2 * CountNodes[depth - 1]]
+  ]
+
+Run[] := With[{args = Args[]},
+  With[{n = ParseInt[First[args]]},
+    Print[CountNodes[n]]
+  ]
+]
+
+Run[]
+"#;
+        let mut parser = Parser::new(input.to_string());
+        let result = parser.parse();
+        assert!(result.is_some(), "Parse failed");
+    }
+
+    #[test]
+    fn test_fannkuch_benchmark() {
+        let input = include_str!("../../benchmarks/programs/fannkuch_redux.w");
+        let mut parser = Parser::new(input.to_string());
+        let result = parser.parse();
+        assert!(result.is_some(), "Parse failed");
+    }
+
+    #[test]
+    fn test_binary_trees_benchmark() {
+        let input = include_str!("../../benchmarks/programs/binary_trees.w");
+        let mut parser = Parser::new(input.to_string());
+        let result = parser.parse();
+        assert!(result.is_some(), "Parse failed");
+    }
+
+    #[test]
+    fn test_nbody_benchmark() {
+        let input = include_str!("../../benchmarks/programs/n_body.w");
+        let mut parser = Parser::new(input.to_string());
+        let result = parser.parse();
+        if result.is_none() {
+            println!("Input:\n{}", input);
+        }
+        assert!(result.is_some(), "Parse failed");
+    }
+
+    #[test]
+    fn test_pi_function() {
+        let input = "Pi[] := 3.14159";
+        let mut parser = Parser::new(input.to_string());
+        let result = parser.parse();
+        assert!(result.is_some(), "Parse failed: {:?}", result);
+    }
+
+    #[test]
+    fn test_float_literal() {
+        let input = "3.14159";
+        let mut parser = Parser::new(input.to_string());
+        let result = parser.parse();
+        assert!(result.is_some(), "Parse failed");
+    }
+
+    #[test]
+    fn test_negative_float_literal() {
+        let input = "0.0 - 1.5";
+        let mut parser = Parser::new(input.to_string());
+        let result = parser.parse();
+        assert!(result.is_some(), "Parse failed");
+    }
+
+    #[test]
+    fn test_negative_in_binding() {
+        let input = "With[{x = 0.0 - 1.5}, x]";
+        let mut parser = Parser::new(input.to_string());
+        let result = parser.parse();
+        assert!(result.is_some(), "Parse failed");
+    }
+
+    #[test]
+    fn test_spectral_norm_simple() {
+        let input = r#"
+Dot[a: List[Float64], b: List[Float64]] :=
+  Fold[Function[{sum, i}, sum + Nth[a, i] * Nth[b, i]], 0.0, Range[0, Length[a] - 1]]
+
+Run[] := Print[Dot[[1.0, 2.0], [3.0, 4.0]]]
+
+Run[]
+"#;
+        let mut parser = Parser::new(input.to_string());
+        let result = parser.parse();
+        assert!(result.is_some(), "Parse failed");
+    }
+
+    #[test]
+    fn test_power_iteration() {
+        let input = r#"
+PowerIteration[n: Int32, steps: Int32] :=
+  With[{u0 = Map[Function[{i}, 1.0], Range[n]]},
+    Fold[Function[{u, step}, u], u0, Range[steps]]
+  ]
+
+Run[] := PowerIteration[10, 5]
+
+Run[]
+"#;
+        let mut parser = Parser::new(input.to_string());
+        let result = parser.parse();
+        assert!(result.is_some(), "Parse failed");
+    }
+
+    #[test]
+    fn test_spectral_norm_benchmark() {
+        let input = include_str!("../../benchmarks/programs/spectral_norm.w");
+        let mut parser = Parser::new(input.to_string());
+        let result = parser.parse();
+        if result.is_none() {
+            println!("Input:\n{}", input);
+        }
+        assert!(result.is_some(), "Parse failed");
+    }
 }

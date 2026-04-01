@@ -962,7 +962,6 @@ impl RustCodeGenerator {
                 conditions,
                 default_statements,
             } => {
-                // Generate if-else chain
                 let mut result = String::new();
 
                 for (i, (condition, statements)) in conditions.iter().enumerate() {
@@ -971,17 +970,24 @@ impl RustCodeGenerator {
                     }
 
                     let cond_val = self.generate_expression_value(condition)?;
-                    write!(&mut result, "if {} {{\n", cond_val)?;
 
-                    self.indent_level += 1;
-                    let stmt_val = self.generate_expression_value(statements)?;
-                    write!(&mut result, "{}{}\n", self.indent(), stmt_val)?;
-                    self.indent_level -= 1;
-
-                    write!(&mut result, "{}}}", self.indent())?;
+                    if cond_val == "true" {
+                        result.push_str("{\n");
+                        self.indent_level += 1;
+                        let stmt_val = self.generate_expression_value(statements)?;
+                        write!(&mut result, "{}{}\n", self.indent(), stmt_val)?;
+                        self.indent_level -= 1;
+                        write!(&mut result, "{}}}", self.indent())?;
+                    } else {
+                        write!(&mut result, "if {} {{\n", cond_val)?;
+                        self.indent_level += 1;
+                        let stmt_val = self.generate_expression_value(statements)?;
+                        write!(&mut result, "{}{}\n", self.indent(), stmt_val)?;
+                        self.indent_level -= 1;
+                        write!(&mut result, "{}}}", self.indent())?;
+                    }
                 }
 
-                // Generate default case if present
                 if let Some(default_expr) = default_statements {
                     write!(&mut result, " else {{\n")?;
                     self.indent_level += 1;
@@ -1137,6 +1143,106 @@ impl RustCodeGenerator {
                 result.push_str(&format!("{}}}", self.indent()));
                 Ok(result)
             }
+
+            Expression::Do {
+                body,
+                var,
+                start,
+                end,
+                step,
+            } => {
+                // Generate Rust for loop
+                // Do[body, {n}] -> for _ in 1..=n { body }
+                // Do[body, {i, imax}] -> for i in 1..=imax { body }
+                // Do[body, {i, imin, imax}] -> for i in imin..=imax { body }
+                // Do[body, {i, imin, imax, di}] -> for i in (imin..=imax).step_by(di) { body }
+
+                let mut result = String::from("{\n");
+                self.indent_level += 1;
+
+                let end_str = self.generate_expression_value(end)?;
+
+                match (var, start, step) {
+                    (None, None, None) => {
+                        // Do[body, {n}] - no loop variable
+                        result.push_str(&format!("{}for _ in 1..={} {{\n", self.indent(), end_str));
+                    }
+                    (Some(var_name), None, None) => {
+                        // Do[body, {i, imax}] - start from 1
+                        let var_snake = to_snake_case(var_name);
+                        result.push_str(&format!(
+                            "{}for {} in 1..={} {{\n",
+                            self.indent(),
+                            var_snake,
+                            end_str
+                        ));
+                    }
+                    (Some(var_name), Some(start_expr), None) => {
+                        // Do[body, {i, imin, imax}] - explicit start
+                        let var_snake = to_snake_case(var_name);
+                        let start_str = self.generate_expression_value(start_expr)?;
+                        result.push_str(&format!(
+                            "{}for {} in {}..={} {{\n",
+                            self.indent(),
+                            var_snake,
+                            start_str,
+                            end_str
+                        ));
+                    }
+                    (Some(var_name), Some(start_expr), Some(step_expr)) => {
+                        // Do[body, {i, imin, imax, di}] - with step
+                        let var_snake = to_snake_case(var_name);
+                        let start_str = self.generate_expression_value(start_expr)?;
+                        let step_str = self.generate_expression_value(step_expr)?;
+                        result.push_str(&format!(
+                            "{}for {} in ({}..={}).step_by({} as usize) {{\n",
+                            self.indent(),
+                            var_snake,
+                            start_str,
+                            end_str,
+                            step_str
+                        ));
+                    }
+                    _ => return Err(std::fmt::Error),
+                }
+
+                self.indent_level += 1;
+                let body_str = self.generate_expression_value(body)?;
+                result.push_str(&format!("{}{};\n", self.indent(), body_str));
+                self.indent_level -= 1;
+
+                result.push_str(&format!("{}}}\n", self.indent()));
+
+                self.indent_level -= 1;
+                result.push_str(&format!("{}}}", self.indent()));
+                Ok(result)
+            }
+
+            Expression::While { condition, body } => {
+                // Generate Rust while loop
+                // While[condition, body] -> while condition { body }
+
+                let mut result = String::from("{\n");
+                self.indent_level += 1;
+
+                let cond_str = self.generate_expression_value(condition)?;
+                result.push_str(&format!("{}while {} {{\n", self.indent(), cond_str));
+
+                self.indent_level += 1;
+                let body_str = self.generate_expression_value(body)?;
+                result.push_str(&format!("{}{};\n", self.indent(), body_str));
+                self.indent_level -= 1;
+
+                result.push_str(&format!("{}}}\n", self.indent()));
+
+                self.indent_level -= 1;
+                result.push_str(&format!("{}}}", self.indent()));
+                Ok(result)
+            }
+
+            Expression::Break => Ok("break".to_string()),
+
+            Expression::Continue => Ok("continue".to_string()),
         }
     }
 
@@ -1251,6 +1357,18 @@ fn to_snake_case(s: &str) -> String {
             result.push(c);
             prev_is_upper = false;
         }
+    }
+
+    // Avoid Rust reserved keywords by appending underscore
+    let reserved_keywords = [
+        "as", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn",
+        "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref",
+        "return", "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe",
+        "use", "where", "while", "async", "await", "dyn",
+    ];
+
+    if reserved_keywords.contains(&result.as_str()) {
+        result.push('_');
     }
 
     result

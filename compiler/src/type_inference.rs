@@ -672,6 +672,83 @@ impl TypeInference {
             Expression::StructInstantiation { .. } => {
                 Err(TypeError::CannotInfer("struct instantiation".to_string()))
             }
+
+            // Do loop - returns unit type ()
+            Expression::Do {
+                body,
+                var,
+                start,
+                end,
+                step,
+            } => {
+                // Create child environment if there's a loop variable
+                let mut child_env = self.env.child();
+                if let Some(var_name) = var {
+                    child_env.bind(var_name.clone(), Type::Int64);
+                }
+
+                // Type check the body in the child environment
+                let mut child_inference = TypeInference { env: child_env };
+                child_inference.infer_expression(body)?;
+
+                // Type check start, end, step expressions
+                if let Some(start_expr) = start {
+                    let start_type = self.infer_expression(start_expr)?;
+                    if !is_numeric(&start_type) {
+                        return Err(TypeError::TypeMismatch {
+                            expected: Type::Int64,
+                            actual: start_type,
+                            context: "do loop start".to_string(),
+                        });
+                    }
+                }
+                let end_type = self.infer_expression(end)?;
+                if !is_numeric(&end_type) {
+                    return Err(TypeError::TypeMismatch {
+                        expected: Type::Int64,
+                        actual: end_type,
+                        context: "do loop end".to_string(),
+                    });
+                }
+                if let Some(step_expr) = step {
+                    let step_type = self.infer_expression(step_expr)?;
+                    if !is_numeric(&step_type) {
+                        return Err(TypeError::TypeMismatch {
+                            expected: Type::Int64,
+                            actual: step_type,
+                            context: "do loop step".to_string(),
+                        });
+                    }
+                }
+
+                // Do returns unit type
+                Ok(Type::Tuple(vec![]))
+            }
+
+            // While loop - returns unit type ()
+            Expression::While { condition, body } => {
+                // Condition must be boolean
+                let cond_type = self.infer_expression(condition)?;
+                if cond_type != Type::Bool {
+                    return Err(TypeError::TypeMismatch {
+                        expected: Type::Bool,
+                        actual: cond_type,
+                        context: "while condition".to_string(),
+                    });
+                }
+
+                // Type check the body
+                self.infer_expression(body)?;
+
+                // While returns unit type
+                Ok(Type::Tuple(vec![]))
+            }
+
+            // Break - returns never type (but we'll use unit for simplicity)
+            Expression::Break => Ok(Type::Tuple(vec![])),
+
+            // Continue - returns never type (but we'll use unit for simplicity)
+            Expression::Continue => Ok(Type::Tuple(vec![])),
         }
     }
 

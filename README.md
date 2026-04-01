@@ -232,6 +232,55 @@ With[{
 
 Bindings are **sequential** - each binding can reference variables from previous bindings in the same `With` expression. The body expression has access to all bindings in its scope. Bindings are **immutable** - they cannot be reassigned (use `Module` for mutable state, coming soon).
 
+### Loops and Iteration
+
+W provides both procedural loops and functional iteration constructs, inspired by Wolfram Language.
+
+#### Do Loop
+
+The `Do` loop iterates a fixed number of times:
+
+```
+(* Simple iteration - execute body 3 times *)
+Do[Print["Hello"], 3]
+
+(* With loop variable - i goes from 1 to 5 *)
+Do[Print[i], {i, 5}]
+
+(* With range - i goes from 2 to 5 *)
+Do[Print[i], {i, 2, 5}]
+
+(* With step - i goes from 1 to 10 by 2 *)
+Do[Print[i], {i, 1, 10, 2}]
+
+(* Nested loops *)
+Do[Do[Print[i + j], {j, 3}], {i, 2}]
+```
+
+#### While Loop
+
+The `While` loop iterates while a condition is true:
+
+```
+(* Simple while loop *)
+While[condition, body]
+
+(* Example with Break *)
+Do[
+  If[i == 5, Break[]],
+  {i, 10}
+]
+```
+
+#### Break and Continue
+
+Control flow inside loops:
+
+```
+Break[]      (* Exit the loop immediately *)
+Continue[]   (* Skip to next iteration *)
+```
+
 ### Closures and Higher-Order Functions
 ```
 (* Lambda/Anonymous function syntax *)
