@@ -5,14 +5,19 @@ A functional programming language that transpiles to Rust with Wolfram Language-
 ## Syntax Overview
 
 - **Function calls**: `FunctionName[arg1, arg2]`
-- **Operators**: `1 + 2`, `x * x`
+- **Operators**: `1 + 2`, `x * x`, `2 ^ 3` (power)
 - **Comments**: `# comment` or `(* comment *)`
 - **Variables**: Immutable bindings via `With[{x = 5}, body]`
 - **Functions**: `f[x, y] := expression` or with types `f[x: Int32] := x * x`
 - **Lambdas**: `Function[{x}, x * 2]` or shorthand `x -> x * 2`
-- **Conditionals**: `Cond[[cond1, val1], [cond2, val2], [default]]`
+- **Pipe operator**: `data |> Map[x -> x * 2] |> Filter[x -> x > 5]`
+- **Error propagation**: `GetValue[x]?` (unwraps Option/Result, short-circuits on None/Err)
+- **Conditionals**: `If[cond, then_expr]` or `Cond[[cond1, val1], [cond2, val2], [default]]`
 - **Pattern matching**: `Match[value, [Some[x], x], [None, 0]]`
-- **Loops**: `Do[body, {i, n}]`, `While[cond, body]`
+- **Structs**: `Struct[Point, [x: Int32, y: Int32]]`
+- **Loops**: `Do[body, {i, n}]`, `While[cond, body]`, `Break[]`, `Continue[]`
+- **Higher-order functions**: `Map[f, list]`, `Filter[f, list]`, `Fold[f, init, list]`
+- **Logging**: `LogDebug[msg]`, `LogInfo[msg]`, `LogWarn[msg]`, `LogError[msg]`
 
 ## Types
 
