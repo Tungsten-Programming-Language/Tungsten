@@ -664,6 +664,26 @@ impl TypeInference {
                 body_inference.infer_expression(body)
             }
 
+            // Module expression - local mutable bindings
+            Expression::Module { bindings, body } => {
+                let mut child_env = self.env.child();
+
+                for (name, init_expr) in bindings {
+                    if let Some(expr) = init_expr {
+                        let mut child_inference = TypeInference {
+                            env: child_env.clone(),
+                        };
+                        let binding_type = child_inference.infer_expression(expr)?;
+                        child_env.bind(name.clone(), binding_type);
+                    } else {
+                        child_env.bind(name.clone(), Type::Custom("_".to_string()));
+                    }
+                }
+
+                let mut body_inference = TypeInference { env: child_env };
+                body_inference.infer_expression(body)
+            }
+
             // Not yet implemented
             Expression::Program(_) => Err(TypeError::CannotInfer("program".to_string())),
             Expression::Lambda { .. } => Err(TypeError::CannotInfer("lambda".to_string())),

@@ -138,6 +138,12 @@ impl Parser {
                 return self.parse_with_expression();
             }
 
+            // Special handling for Module - local mutable bindings expression
+            if id == "Module" {
+                self.advance();
+                return self.parse_module_expression();
+            }
+
             // Special handling for Cond - don't treat it as a regular function call
             if id == "Cond" {
                 self.advance();
@@ -1241,6 +1247,85 @@ impl Parser {
         }
 
         Some(Expression::With { bindings, body })
+    }
+
+    /// Parses a Module expression with the structure:
+    /// Module[{x, y, ...}, body] or Module[{x = expr1, y = expr2, ...}, body]
+    ///
+    /// Variables can be uninitialized (just name) or initialized (name = expr)
+    ///
+    /// # Returns
+    /// - `Some(Expression::Module)` if parsing succeeds
+    /// - `None` if parsing fails
+    fn parse_module_expression(&mut self) -> Option<Expression> {
+        // Expect left bracket for Module
+        match self.current_token {
+            Some(Token::LeftBracket) => self.advance(),
+            _ => return None,
+        }
+
+        // Expect left brace for bindings
+        match self.current_token {
+            Some(Token::LeftBrace) => self.advance(),
+            _ => return None,
+        }
+
+        let mut bindings = Vec::new();
+
+        // Parse bindings: name, name = expr, ...
+        while let Some(token) = &self.current_token {
+            match token {
+                Token::RightBrace => break,
+                Token::Identifier(name) => {
+                    let binding_name = name.clone();
+                    self.advance();
+
+                    // Check if there's an '=' for initialization
+                    match &self.current_token {
+                        Some(Token::Assign) => {
+                            self.advance();
+                            let init_expr = self.parse_expression()?;
+                            bindings.push((binding_name, Some(init_expr)));
+                        }
+                        _ => {
+                            // Uninitialized variable
+                            bindings.push((binding_name, None));
+                        }
+                    }
+
+                    // Handle comma between bindings
+                    if matches!(self.current_token, Some(Token::Comma)) {
+                        self.advance();
+                    } else if !matches!(self.current_token, Some(Token::RightBrace)) {
+                        return None;
+                    }
+                }
+                _ => return None,
+            }
+        }
+
+        // Consume right brace
+        match self.current_token {
+            Some(Token::RightBrace) => self.advance(),
+            _ => return None,
+        }
+
+        // Expect comma after bindings
+        match self.current_token {
+            Some(Token::Comma) => self.advance(),
+            _ => return None,
+        }
+
+        // Parse body expression
+        let body = Box::new(self.parse_expression()?);
+
+        // Consume right bracket of Module
+        match self.current_token {
+            Some(Token::RightBracket) => self.advance(),
+            _ => return None,
+        }
+
+        Some(Expression::Module { bindings, body })
     }
 
     /// Parses a pattern for use in Match expressions

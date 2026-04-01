@@ -190,6 +190,16 @@ pub enum Expression {
         body: Box<Expression>,
     },
 
+    /// Module expression - local mutable bindings (lexical scoping)
+    /// Structure: Module[{x, y, ...}, body] or Module[{x = expr1, y = expr2, ...}, body]
+    /// Implements Wolfram Language's Module scoping construct
+    /// Variables can be uninitialized or initialized
+    /// Transpiles to Rust block expression with `let mut` bindings
+    Module {
+        bindings: Vec<(String, Option<Expression>)>,
+        body: Box<Expression>,
+    },
+
     /// Do loop - iterate a fixed number of times
     /// Structure: Do[body, {n}] or Do[body, {i, imax}] or Do[body, {i, imin, imax}]
     /// Transpiles to Rust for loop

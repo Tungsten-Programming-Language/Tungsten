@@ -387,6 +387,10 @@ impl RustCodeGenerator {
                 // Return type is the type of the body expression
                 self.infer_return_type(body, parameters)
             }
+            Expression::Module { body, .. } => {
+                // Return type is the type of the body expression
+                self.infer_return_type(body, parameters)
+            }
             Expression::Cond {
                 conditions,
                 default_statements,
@@ -1136,6 +1140,33 @@ impl RustCodeGenerator {
                 }
 
                 // Generate body expression (without semicolon, as it's a value)
+                let body_str = self.generate_expression_value(body)?;
+                result.push_str(&format!("{}{}\n", self.indent(), body_str));
+
+                self.indent_level -= 1;
+                result.push_str(&format!("{}}}", self.indent()));
+                Ok(result)
+            }
+
+            Expression::Module { bindings, body } => {
+                let mut result = String::from("{\n");
+                self.indent_level += 1;
+
+                for (name, init_expr) in bindings {
+                    let name_snake = to_snake_case(name);
+                    if let Some(expr) = init_expr {
+                        let expr_str = self.generate_expression_value(expr)?;
+                        result.push_str(&format!(
+                            "{}let mut {} = {};\n",
+                            self.indent(),
+                            name_snake,
+                            expr_str
+                        ));
+                    } else {
+                        result.push_str(&format!("{}let mut {}: _;\n", self.indent(), name_snake));
+                    }
+                }
+
                 let body_str = self.generate_expression_value(body)?;
                 result.push_str(&format!("{}{}\n", self.indent(), body_str));
 
