@@ -340,6 +340,30 @@ impl TypeInference {
                                 // For now, return List of unknown type
                                 Ok(Type::List(Box::new(Type::Int32)))
                             }
+                            "LazyMap" | "LazyFilter" => {
+                                // LazyMap and LazyFilter return iterators
+                                if arguments.len() != 2 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 2,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                // Return Iterator type
+                                Ok(Type::Iterator(Box::new(Type::Int32)))
+                            }
+                            "Collect" => {
+                                // Collect[iter] returns a List
+                                if arguments.len() != 1 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 1,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                // Return List type
+                                Ok(Type::List(Box::new(Type::Int32)))
+                            }
                             "Fold" => {
                                 // Fold returns the accumulator type
                                 if arguments.len() != 3 {

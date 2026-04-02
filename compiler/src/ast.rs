@@ -46,6 +46,7 @@ pub enum Type {
     HashSet(Box<Type>),             // HashSet<T>
     BTreeMap(Box<Type>, Box<Type>), // BTreeMap<K, V>
     BTreeSet(Box<Type>),            // BTreeSet<T>
+    Iterator(Box<Type>),            // Lazy iterator over T
     Function(Vec<Type>, Box<Type>),
 
     // Error handling types (crucial for Rust's safety model)

@@ -266,6 +266,9 @@ impl RustCodeGenerator {
             Type::BTreeSet(inner) => {
                 format!("std::collections::BTreeSet<{}>", self.type_to_rust(inner))
             }
+            Type::Iterator(inner) => {
+                format!("std::iter::Iterator<Item = {}>", self.type_to_rust(inner))
+            }
             Type::Function(params, ret) => {
                 let param_types: Vec<String> =
                     params.iter().map(|p| self.type_to_rust(p)).collect();
@@ -430,6 +433,22 @@ impl RustCodeGenerator {
                             "Vec<i64>".to_string()
                         }
                     }
+                    "LazyMap" | "LazyFilter" => {
+                        // Returns an iterator (simplified as impl Iterator)
+                        if arguments.len() >= 2 {
+                            self.infer_return_type(&arguments[1], parameters)
+                        } else {
+                            "impl Iterator<Item = i64>".to_string()
+                        }
+                    }
+                    "Collect" => {
+                        // Returns a Vec
+                        if arguments.len() >= 1 {
+                            self.infer_return_type(&arguments[0], parameters)
+                        } else {
+                            "Vec<i64>".to_string()
+                        }
+                    }
                     "FlatMap" => {
                         if arguments.len() >= 2 {
                             self.infer_return_type(&arguments[1], parameters)
@@ -493,6 +512,7 @@ impl RustCodeGenerator {
                                                         || name == "Zip"
                                                         || name == "FlatMap"
                                                         || name == "GroupBy"
+                                                        || name == "Collect"
                                                         || self
                                                             .struct_definitions
                                                             .contains_key(name)
@@ -741,6 +761,67 @@ impl RustCodeGenerator {
                                     }
                                 }
                             }
+                            "LazyMap" => {
+                                // LazyMap[function, list] -> list.into_iter().map(|x| function(x))
+                                // Returns an iterator, not a collected Vec
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list = self.generate_expression_value(&arguments[1])?;
+                                match &arguments[0] {
+                                    Expression::Lambda { parameters, body } => {
+                                        if parameters.len() == 1 {
+                                            let param = &to_snake_case(&parameters[0].name);
+                                            let body_str = self.generate_expression_value(body)?;
+                                            Ok(format!(
+                                                "{}.into_iter().map(|{}| {})",
+                                                list, param, body_str
+                                            ))
+                                        } else {
+                                            Err(std::fmt::Error)
+                                        }
+                                    }
+                                    _ => {
+                                        let func = self.generate_expression_value(&arguments[0])?;
+                                        Ok(format!("{}.into_iter().map({})", list, func))
+                                    }
+                                }
+                            }
+                            "LazyFilter" => {
+                                // LazyFilter[predicate, list] -> list.into_iter().filter(|&x| predicate(x))
+                                // Returns an iterator, not a collected Vec
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list = self.generate_expression_value(&arguments[1])?;
+                                match &arguments[0] {
+                                    Expression::Lambda { parameters, body } => {
+                                        if parameters.len() == 1 {
+                                            let param = &to_snake_case(&parameters[0].name);
+                                            let body_str = self.generate_expression_value(body)?;
+                                            Ok(format!(
+                                                "{}.into_iter().filter(|&{}| {})",
+                                                list, param, body_str
+                                            ))
+                                        } else {
+                                            Err(std::fmt::Error)
+                                        }
+                                    }
+                                    _ => {
+                                        let func = self.generate_expression_value(&arguments[0])?;
+                                        Ok(format!("{}.into_iter().filter({})", list, func))
+                                    }
+                                }
+                            }
+                            "Collect" => {
+                                // Collect[iter] -> iter.collect::<Vec<_>>()
+                                // Collects an iterator into a Vec
+                                if arguments.len() != 1 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let iter = self.generate_expression_value(&arguments[0])?;
+                                Ok(format!("{}.collect::<Vec<_>>()", iter))
+                            }
                             "Fold" => {
                                 // Fold[function, init, list] -> list.into_iter().fold(init, |acc, x| function(acc, x))
                                 if arguments.len() != 3 {
@@ -800,6 +881,7 @@ impl RustCodeGenerator {
                                                                 || name == "Zip"
                                                                 || name == "FlatMap"
                                                                 || name == "GroupBy"
+                                                                || name == "Collect"
                                                                 || self
                                                                     .struct_definitions
                                                                     .contains_key(name)

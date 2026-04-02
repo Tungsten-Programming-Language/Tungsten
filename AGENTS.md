@@ -17,6 +17,7 @@ A functional programming language that transpiles to Rust with Wolfram Language-
 - **Structs**: `Struct[Point, [x: Int32, y: Int32]]`
 - **Loops**: `Do[body, {i, n}]`, `While[cond, body]`, `Break[]`, `Continue[]`
 - **Higher-order functions**: `Map[f, list]`, `Filter[f, list]`, `Fold[f, init, list]`, `FlatMap[f, list]`, `Take[n, list]`, `Zip[list1, list2]`, `GroupBy[key_fn, list]`
+- **Lazy iterators**: `LazyMap[f, list]`, `LazyFilter[f, list]`, `Collect[iter]`
 - **Logging**: `LogDebug[msg]`, `LogInfo[msg]`, `LogWarn[msg]`, `LogError[msg]`
 
 ## Primitive Operators
@@ -72,6 +73,25 @@ A functional programming language that transpiles to Rust with Wolfram Language-
 - **Collections**: `List[T]`, `Array[T, N]`, `Map[K, V]`, `HashSet[T]`
 - **Option/Result**: `Option[T]` (`Some[v]`/`None`), `Result[T, E]` (`Ok[v]`/`Err[e]`)
 - **Tuples**: `(1, "hello")`
+
+## Lazy Iterators
+
+Lazy iterators avoid intermediate allocations when chaining operations:
+
+| Function | Description |
+|----------|-------------|
+| `LazyMap[f, list]` | Returns iterator (no collection) |
+| `LazyFilter[pred, list]` | Returns iterator (no collection) |
+| `Collect[iter]` | Materializes iterator into List |
+
+**Eager vs Lazy comparison:**
+```
+(* Eager - creates intermediate Vec after each operation *)
+[1, 2, 3] |> Map[x -> x * 2] |> Filter[x -> x > 3]
+
+(* Lazy - single allocation at the end *)
+[1, 2, 3] |> LazyMap[x -> x * 2] |> LazyFilter[x -> x > 3] |> Collect[]
+```
 
 ## Repository Structure
 
