@@ -1,0 +1,11 @@
+[package]
+name = "apps"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+w = { path = "../compiler" }
+
+[lib]
+name = "apps"
+path = "lib.rs"
