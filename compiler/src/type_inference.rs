@@ -380,6 +380,17 @@ impl TypeInference {
                                 // Args[] returns List[String]
                                 Ok(Type::List(Box::new(Type::String)))
                             }
+                            "ReadLine" => {
+                                // ReadLine[] returns Option[String]
+                                if !arguments.is_empty() {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 0,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::Option(Box::new(Type::String)))
+                            }
                             "Length" => {
                                 // Length[list] returns Int64
                                 if arguments.len() != 1 {
@@ -489,6 +500,22 @@ impl TypeInference {
                                     });
                                 }
                                 Ok(Type::List(Box::new(Type::Int64)))
+                            }
+                            "Append" => {
+                                // Append[list, item] returns list of same type
+                                if arguments.len() != 2 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 2,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                // Infer element type from list argument
+                                let list_type = self.infer_expression(&arguments[0])?;
+                                match list_type {
+                                    Type::List(elem_type) => Ok(Type::List(elem_type)),
+                                    _ => Ok(Type::List(Box::new(Type::Int64))),
+                                }
                             }
                             "Take" => {
                                 // Take[n, list] returns list of same type

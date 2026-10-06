@@ -426,6 +426,14 @@ impl RustCodeGenerator {
                     "Sqrt" | "Sin" | "Cos" => "f64".to_string(),
                     "ParseInt" => "i64".to_string(),
                     "Args" => "Vec<String>".to_string(),
+                    "ReadLine" => "Option<String>".to_string(),
+                    "Append" => {
+                        if arguments.len() >= 1 {
+                            self.infer_return_type(&arguments[0], parameters)
+                        } else {
+                            "Vec<i64>".to_string()
+                        }
+                    }
                     "Map" | "Filter" | "Take" => {
                         if arguments.len() >= 2 {
                             self.infer_return_type(&arguments[1], parameters)
@@ -513,6 +521,7 @@ impl RustCodeGenerator {
                                                         || name == "FlatMap"
                                                         || name == "GroupBy"
                                                         || name == "Collect"
+                                                        || name == "Append"
                                                         || self
                                                             .struct_definitions
                                                             .contains_key(name)
@@ -882,6 +891,7 @@ impl RustCodeGenerator {
                                                                 || name == "FlatMap"
                                                                 || name == "GroupBy"
                                                                 || name == "Collect"
+                                                                || name == "Append"
                                                                 || self
                                                                     .struct_definitions
                                                                     .contains_key(name)
@@ -915,6 +925,10 @@ impl RustCodeGenerator {
                             "Args" => {
                                 // Args[] -> std::env::args().skip(1).collect::<Vec<String>>()
                                 Ok("std::env::args().skip(1).collect::<Vec<String>>()".to_string())
+                            }
+                            "ReadLine" => {
+                                // ReadLine[] -> read line from stdin, return Option<String>
+                                Ok("{ let mut s = String::new(); match std::io::stdin().read_line(&mut s) { Ok(0) => None, Ok(_) => Some(s.trim().to_string()), Err(_) => None } }".to_string())
                             }
                             "Length" => {
                                 // Length[list] -> list.len()
@@ -1030,6 +1044,15 @@ impl RustCodeGenerator {
                                 }
                                 let list = self.generate_expression_value(&arguments[0])?;
                                 Ok(format!("{}.into_iter().rev().collect::<Vec<_>>()", list))
+                            }
+                            "Append" => {
+                                // Append[list, item] -> { let mut l = list; l.push(item); l }
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list = self.generate_expression_value(&arguments[0])?;
+                                let item = self.generate_expression_value(&arguments[1])?;
+                                Ok(format!("{{ let mut l = {}; l.push({}); l }}", list, item))
                             }
                             "Take" => {
                                 // Take[n, list] -> list.into_iter().take(n as usize).collect::<Vec<_>>()
