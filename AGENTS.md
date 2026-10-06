@@ -17,6 +17,8 @@ A functional programming language that transpiles to Rust with Wolfram Language-
 - **Structs**: `Struct[Point, [x: Int32, y: Int32]]`
 - **Loops**: `Do[body, {i, n}]`, `While[cond, body]`, `Break[]`, `Continue[]`
 - **Higher-order functions**: `Map[f, list]`, `Filter[f, list]`, `Fold[f, init, list]`, `FlatMap[f, list]`, `Take[n, list]`, `Zip[list1, list2]`, `GroupBy[key_fn, list]`
+- **List operations**: `Append[list, item]`, `Length[list]`, `First[list]`, `Rest[list]`, `Reverse[list]`, `Concat[a, b]`, `Nth[list, i]`
+- **Input/Output**: `ReadLine[]`, `Print[msg]`, `Args[]`
 - **Lazy iterators**: `LazyMap[f, list]`, `LazyFilter[f, list]`, `Collect[iter]`
 - **Logging**: `LogDebug[msg]`, `LogInfo[msg]`, `LogWarn[msg]`, `LogError[msg]`
 
@@ -92,6 +94,59 @@ Lazy iterators avoid intermediate allocations when chaining operations:
 (* Lazy - single allocation at the end *)
 [1, 2, 3] |> LazyMap[x -> x * 2] |> LazyFilter[x -> x > 3] |> Collect[]
 ```
+
+## Input/Output
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `ReadLine[]` | `: Option[String]` | Read line from stdin, returns `Some[line]` or `None` on EOF |
+| `Print[msg]` | `: ()` | Print message to stdout |
+| `Args[]` | `: List[String]` | Get command-line arguments |
+
+**ReadLine usage:**
+```
+(* Pattern match on result *)
+Match[ReadLine[],
+    [Some[line], Print["You entered: ", line]],
+    [None, Print["EOF reached"]]
+]
+```
+
+## List Operations
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `Append[list, item]` | `List[T] -> List[T]` | Append item to list, returns mutated list |
+| `Length[list]` | `List[T] -> Int64` | Get list length |
+| `First[list]` | `List[T] -> T` | Get first element |
+| `Rest[list]` | `List[T] -> List[T]` | Get all elements except first |
+| `Reverse[list]` | `List[T] -> List[T]` | Reverse list |
+| `Concat[a, b]` | `List[T] -> List[T] -> List[T]` | Concatenate two lists |
+| `Nth[list, i]` | `List[T] -> Int64 -> T` | Get element at index |
+| `Set[list, i, v]` | `List[T] -> Int64 -> T -> List[T]` | Set element at index |
+
+## Language Restrictions & Known Issues
+
+Verified working (transpiled and executed end-to-end), but the parser and
+codegen have these sharp edges:
+
+**Parser restrictions:**
+
+- Statements are separated by newlines only. There is **no semicolon token**
+  in the lexer — `stmt1; stmt2` fails to parse.
+- `Module[{...}, body]` accepts a **single body expression** only. Multi-
+  statement programs must be newline-separated top-level forms.
+- **Bare top-level assignments are not supported** (`l = [1, 2, 3]` at file
+  top level fails to parse). Bindings must live inside `With[{...}, ...]` or
+  `Module[{...}, ...]`.
+
+**Codegen issues:**
+
+- `Print[Match[...]]` where the match arms are `Print[...]` (unit-typed arms)
+  fails rustc: the outer `println!` tries to format the match's `()` result.
+  Use the bare `Match[ReadLine[], ...]` form at top level instead.
+- `StringJoin` exists in codegen but emits an unscoped `string_join` call,
+  which does not link. Avoid it until it is scoped into the stdlib.
 
 ## Repository Structure
 
