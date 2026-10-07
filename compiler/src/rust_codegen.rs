@@ -6,6 +6,18 @@ use crate::ast::{Expression, LogLevel, Operator, Pattern, Type, TypeAnnotation, 
 use std::collections::HashMap;
 use std::fmt::Write;
 
+/// Arm classification for Cond/If type normalization.
+/// - Unit: definitely evaluates to () (Print, Break, Continue)
+/// - Value: definitely evaluates to a non-unit value
+/// - Unknown: cannot tell (bare identifier not in parameters, e.g. a
+///   With-bound variable, or an unknown call) - never drives normalization
+#[derive(Clone, Copy, PartialEq)]
+enum ArmKind {
+    Unit,
+    Value,
+    Unknown,
+}
+
 pub struct RustCodeGenerator {
     output: String,
     indent_level: usize,
@@ -13,6 +25,10 @@ pub struct RustCodeGenerator {
     in_function: bool,
     /// Track defined struct names and their fields
     struct_definitions: HashMap<String, Vec<String>>,
+    /// Parameters of the function being generated, for type-aware inference
+    parameters: Vec<TypeAnnotation>,
+    /// Inferred return types of user-defined functions (name -> Rust type)
+    fn_returns: HashMap<String, String>,
 }
 
 impl RustCodeGenerator {
@@ -22,6 +38,8 @@ impl RustCodeGenerator {
             indent_level: 0,
             in_function: false,
             struct_definitions: HashMap::new(),
+            parameters: Vec::new(),
+            fn_returns: HashMap::new(),
         }
     }
 
@@ -144,16 +162,22 @@ impl RustCodeGenerator {
         if return_type != "()" {
             write!(self.output, " -> {}", return_type)?;
         }
+        // Record for call-site inference (used by Cond/If arm classification)
+        self.fn_returns.insert(name.to_string(), return_type);
 
         writeln!(self.output, " {{")?;
         self.indent_level += 1;
         self.in_function = true;
+        // Track parameters so nested Cond/If codegen can infer arm types
+        // (e.g. a bare identifier `lines` resolves to its List[String] type)
+        self.parameters = parameters.to_vec();
 
         // Generate function body as an expression (no trailing semicolon for return)
         let body_code = self.generate_expression_value(body)?;
         // Write without newline from writeln to keep it as an expression
         write!(self.output, "{}{}\n", self.indent(), body_code)?;
 
+        self.parameters = Vec::new();
         self.in_function = false;
         self.indent_level -= 1;
         writeln!(self.output, "{}}}", self.indent())?;
@@ -517,11 +541,61 @@ impl RustCodeGenerator {
                             "()".to_string()
                         }
                     }
-                    _ => "()".to_string(),
+                    _ => self
+                        .fn_returns
+                        .get(name)
+                        .cloned()
+                        .unwrap_or_else(|| "()".to_string()),
                 },
                 _ => "()".to_string(),
             },
             _ => "()".to_string(),
+        }
+    }
+
+    /// Classify a Cond/If arm's value kind for unit-normalization decisions
+    fn classify_arm(&self, expr: &Expression) -> ArmKind {
+        match expr {
+            // Definitely unit side-effects
+            Expression::Break | Expression::Continue => ArmKind::Unit,
+            Expression::FunctionCall { function, .. } => {
+                if let Expression::Identifier(name) = function.as_ref() {
+                    if name == "Print" {
+                        return ArmKind::Unit;
+                    }
+                }
+                // Classify by inferred type (builtins and user fns via fn_returns)
+                let t = self.infer_return_type(expr, &self.parameters);
+                if t == "()" {
+                    ArmKind::Unit
+                } else {
+                    ArmKind::Value
+                }
+            }
+            // Bare identifier: unit only if it's a parameter (which has a known
+            // type); a With-bound or unresolved identifier is Unknown so it does
+            // not force normalization (e.g. binary_trees' `n`)
+            Expression::Identifier(name) => {
+                let is_param = self.parameters.iter().any(|p| p.name == *name);
+                if is_param {
+                    let t = self.infer_return_type(expr, &self.parameters);
+                    if t == "()" {
+                        ArmKind::Unit
+                    } else {
+                        ArmKind::Value
+                    }
+                } else {
+                    ArmKind::Unknown
+                }
+            }
+            _ => {
+                let t = self.infer_return_type(expr, &self.parameters);
+                if t == "()" {
+                    ArmKind::Unit
+                } else {
+                    ArmKind::Value
+                }
+            }
         }
     }
 
@@ -766,10 +840,20 @@ impl RustCodeGenerator {
                                 }
                                 let cond = self.generate_expression_value(&arguments[0])?;
                                 let then_val = self.generate_expression_value(&arguments[1])?;
-                                // If the If's inferred type is unit, append ";" after each arm
-                                // so mismatched side-effect arms (Result vs ()) normalize.
-                                let if_type = self.infer_return_type(expr, &[]);
-                                let is_unit = if_type == "()";
+                                // If If arms mix a definite-unit side-effect with a definite value,
+                                // append ";" after every arm so all arms normalize
+                                // to unit. All-value Ifs stay as values.
+                                let mut has_unit = self.classify_arm(&arguments[1]) == ArmKind::Unit;
+                                let mut has_value = self.classify_arm(&arguments[1]) == ArmKind::Value;
+                                if arguments.len() == 3 {
+                                    let k = self.classify_arm(&arguments[2]);
+                                    if k == ArmKind::Unit {
+                                        has_unit = true;
+                                    } else if k == ArmKind::Value {
+                                        has_value = true;
+                                    }
+                                }
+                                let is_unit = has_unit && has_value;
                                 let then_suffix = if is_unit { ";" } else { "" };
                                 let mut result = format!("if {} {{\n", cond);
                                 self.indent_level += 1;
@@ -1335,11 +1419,28 @@ impl RustCodeGenerator {
             } => {
                 let mut result = String::new();
 
-                // If the Cond's inferred type is unit, append ";" after each arm
-                // so side-effect arms with different Rust types (e.g. WriteFile
-                // returning Result vs Print returning ()) both normalize to unit.
-                let cond_type = self.infer_return_type(expr, &[]);
-                let is_unit = cond_type == "()";
+                // If Cond arms mix a definite-unit side-effect (Print/Break) with a
+                // definite value (WriteFile -> Result), append ";" after every arm
+                // so all arms normalize to unit. Unknown arms (With-bound or
+                // unresolved identifiers) never drive normalization, and
+                // all-value Conds (benchmark CountNodes) keep their values.
+                let mut has_unit = false;
+                let mut has_value = false;
+                for (_, stmts) in conditions {
+                    match self.classify_arm(stmts) {
+                        ArmKind::Unit => has_unit = true,
+                        ArmKind::Value => has_value = true,
+                        ArmKind::Unknown => {}
+                    }
+                }
+                if let Some(d) = &default_statements {
+                    match self.classify_arm(d) {
+                        ArmKind::Unit => has_unit = true,
+                        ArmKind::Value => has_value = true,
+                        ArmKind::Unknown => {}
+                    }
+                }
+                let is_unit = has_unit && has_value;
 
                 for (i, (condition, statements)) in conditions.iter().enumerate() {
                     if i > 0 {
