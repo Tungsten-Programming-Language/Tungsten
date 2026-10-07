@@ -232,6 +232,35 @@ With[{
 
 Bindings are **sequential** - each binding can reference variables from previous bindings in the same `With` expression. The body expression has access to all bindings in its scope. Bindings are **immutable** - they cannot be reassigned (use `Module` for mutable state, coming soon).
 
+### Input / Output and File I/O
+
+W provides stdin/stdout and file access:
+
+```
+(* Console output and input *)
+Print["Hello"]                    # Print to stdout
+ReadLine[]                        # Read a line from stdin, returns Some[line] or None on EOF
+Args[]                            # Command-line args as List[String]
+
+(* Read a file - returns Some[contents] or None if unreadable *)
+Match[ReadFile["todo.txt"],
+    [Some[content], Print[content]],
+    [None, Print["File not found"]]
+]
+
+(* Write a file - returns Ok[()] or Err[message] *)
+Match[WriteFile["todo.txt", "buy milk"],
+    [Ok[()], Print["Saved"]],
+    [Err[msg], Print["Write failed"]]
+]
+```
+
+Error propagation works with `WriteFile` since it returns a `Result`:
+
+```
+Save[x] := WriteFile["data.txt", x]?
+```
+
 ### Loops and Iteration
 
 W provides both procedural loops and functional iteration constructs, inspired by Wolfram Language.

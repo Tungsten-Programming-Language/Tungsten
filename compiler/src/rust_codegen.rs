@@ -413,20 +413,64 @@ impl RustCodeGenerator {
                     "()".to_string()
                 }
             }
+            Expression::Match { arms, .. } => {
+                // Infer return type from the first arm with a concrete type.
+                // Pattern-bound identifiers (Some[content] -> content) are not in
+                // parameters, so they infer as "()"; skip those and pick a concrete arm.
+                for (_, arm_expr) in arms {
+                    let t = self.infer_return_type(arm_expr, parameters);
+                    if t != "()" {
+                        return t;
+                    }
+                }
+                "()".to_string()
+            }
             Expression::FunctionCall {
                 function,
                 arguments,
             } => match function.as_ref() {
                 Expression::Identifier(name) => match name.as_str() {
                     "First" => "i64".to_string(),
-                    "Rest" | "Reverse" | "Concat" | "Range" => "Vec<i64>".to_string(),
                     "Length" => "usize".to_string(),
                     "Nth" => "i64".to_string(),
-                    "Set" => "Vec<i64>".to_string(),
                     "Sqrt" | "Sin" | "Cos" => "f64".to_string(),
                     "ParseInt" => "i64".to_string(),
                     "Args" => "Vec<String>".to_string(),
                     "ReadLine" => "Option<String>".to_string(),
+                    "ReadFile" => "Option<String>".to_string(),
+                    "WriteFile" => "Result<(), String>".to_string(),
+                    "ToString" => "String".to_string(),
+                    "StringJoin" => "String".to_string(),
+                    "StringSplit" => "Vec<String>".to_string(),
+                    "If" => {
+                        if arguments.len() >= 2 {
+                            self.infer_return_type(&arguments[1], parameters)
+                        } else {
+                            "()".to_string()
+                        }
+                    }
+                    "Rest" | "Reverse" | "Concat" | "Set" | "Take" | "Range" => {
+                        // Infer list element type from the list argument when possible
+                        // (argument[0] for Rest/Reverse/Set/Range, argument[1] for Concat/Take)
+                        let list_arg_idx = if name == "Concat" || name == "Take" { 1 } else { 0 };
+                        let elem_type = if arguments.len() > list_arg_idx {
+                            match &arguments[list_arg_idx] {
+                                Expression::Identifier(id) => {
+                                    // Look up parameter type: Vec<T> -> T
+                                    let full = parameters
+                                        .iter()
+                                        .find(|p| p.name == *id)
+                                        .map(|p| self.type_to_rust(&p.type_))
+                                        .unwrap_or_else(|| "Vec<i64>".to_string());
+                                    full.trim_start_matches("Vec<").trim_end_matches('>').to_string()
+                                }
+                                _ => "i64".to_string(),
+                            }
+                        } else {
+                            "i64".to_string()
+                        };
+                        format!("Vec<{}>", elem_type)
+                    }
                     "Append" => {
                         if arguments.len() >= 1 {
                             self.infer_return_type(&arguments[0], parameters)
@@ -522,6 +566,9 @@ impl RustCodeGenerator {
                                                         || name == "GroupBy"
                                                         || name == "Collect"
                                                         || name == "Append"
+                                                        || name == "ReadFile"
+                                                        || name == "WriteFile"
+                                                        || name == "StringSplit"
                                                         || self
                                                             .struct_definitions
                                                             .contains_key(name)
@@ -711,6 +758,46 @@ impl RustCodeGenerator {
                                     Ok(result)
                                 }
                             }
+                            "If" => {
+                                // If[cond, then] or If[cond, then, else] -> Rust if/else expression
+                                // Without an else branch, the else arm is the unit value ()
+                                if arguments.len() < 2 || arguments.len() > 3 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let cond = self.generate_expression_value(&arguments[0])?;
+                                let then_val = self.generate_expression_value(&arguments[1])?;
+                                // If the If's inferred type is unit, append ";" after each arm
+                                // so mismatched side-effect arms (Result vs ()) normalize.
+                                let if_type = self.infer_return_type(expr, &[]);
+                                let is_unit = if_type == "()";
+                                let then_suffix = if is_unit { ";" } else { "" };
+                                let mut result = format!("if {} {{\n", cond);
+                                self.indent_level += 1;
+                                result.push_str(&format!(
+                                    "{}{}{}\n",
+                                    self.indent(),
+                                    then_val,
+                                    then_suffix
+                                ));
+                                self.indent_level -= 1;
+                                result.push_str(&format!("{}}}", self.indent()));
+                                if arguments.len() == 3 {
+                                    let else_val = self.generate_expression_value(&arguments[2])?;
+                                    result.push_str(&format!(" else {{\n"));
+                                    self.indent_level += 1;
+                                    result.push_str(&format!(
+                                        "{}{}{}\n",
+                                        self.indent(),
+                                        else_val,
+                                        then_suffix
+                                    ));
+                                    self.indent_level -= 1;
+                                    result.push_str(&format!("{}}}", self.indent()));
+                                } else {
+                                    result.push_str(" else { () }");
+                                }
+                                Ok(result)
+                            }
                             "Map" => {
                                 // Map[function, list] -> list.into_iter().map(|x| function(x)).collect::<Vec<_>>()
                                 if arguments.len() != 2 {
@@ -892,6 +979,9 @@ impl RustCodeGenerator {
                                                                 || name == "GroupBy"
                                                                 || name == "Collect"
                                                                 || name == "Append"
+                                                                || name == "ReadFile"
+                                                                || name == "WriteFile"
+                                                                || name == "StringSplit"
                                                                 || self
                                                                     .struct_definitions
                                                                     .contains_key(name)
@@ -929,6 +1019,60 @@ impl RustCodeGenerator {
                             "ReadLine" => {
                                 // ReadLine[] -> read line from stdin, return Option<String>
                                 Ok("{ let mut s = String::new(); match std::io::stdin().read_line(&mut s) { Ok(0) => None, Ok(_) => Some(s.trim().to_string()), Err(_) => None } }".to_string())
+                            }
+                            "ReadFile" => {
+                                // ReadFile[path] -> read entire file as Option<String>
+                                // Returns None if the file doesn't exist or can't be read
+                                if arguments.len() != 1 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let path = self.generate_expression_value(&arguments[0])?;
+                                Ok(format!(
+                                    "std::fs::read_to_string({}).ok()",
+                                    path
+                                ))
+                            }
+                            "WriteFile" => {
+                                // WriteFile[path, contents] -> Result<(), String>
+                                // Returns Ok(()) on success, Err(message) on failure
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let path = self.generate_expression_value(&arguments[0])?;
+                                let contents = self.generate_expression_value(&arguments[1])?;
+                                Ok(format!(
+                                    "std::fs::write({}, {}).map_err(|e| e.to_string())",
+                                    path, contents
+                                ))
+                            }
+                            "ToString" => {
+                                // ToString[x] -> converts any Display value to String
+                                if arguments.len() != 1 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let x = self.generate_expression_value(&arguments[0])?;
+                                Ok(format!("({}).to_string()", x))
+                            }
+                            "StringJoin" => {
+                                // StringJoin[list, sep] -> joins List[String] with separator
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let list = self.generate_expression_value(&arguments[0])?;
+                                let sep = self.generate_expression_value(&arguments[1])?;
+                                Ok(format!("({}).join({}.as_str())", list, sep))
+                            }
+                            "StringSplit" => {
+                                // StringSplit[text, sep] -> splits String into List[String]
+                                if arguments.len() != 2 {
+                                    return Err(std::fmt::Error);
+                                }
+                                let text = self.generate_expression_value(&arguments[0])?;
+                                let sep = self.generate_expression_value(&arguments[1])?;
+                                Ok(format!(
+                                    "({}).split({}.as_str()).map(|s| s.to_string()).collect::<Vec<String>>()",
+                                    text, sep
+                                ))
                             }
                             "Length" => {
                                 // Length[list] -> list.len()
@@ -988,16 +1132,21 @@ impl RustCodeGenerator {
                                 }
                             }
                             "Nth" => {
-                                // Nth[list, i] -> list[i as usize]
+                                // Nth[list, i] -> list[i as usize].clone()
+                                // Clone so the element can be used by value without
+                                // moving out of a named Vec binding (E0507)
                                 if arguments.len() != 2 {
                                     return Err(std::fmt::Error);
                                 }
                                 let list = self.generate_expression_value(&arguments[0])?;
                                 let idx = self.generate_expression_value(&arguments[1])?;
-                                Ok(format!("{}[{} as usize]", list, idx))
+                                Ok(format!("{}[{} as usize].clone()", list, idx))
                             }
                             "Set" => {
-                                // Set[list, i, v] -> { let mut l = list; l[i as usize] = v; l }
+                                // Set[list, i, v] -> { let mut l = list.clone(); l[i as usize] = v; l }
+                                // Clone the input so the replacement value can still
+                                // reference the original list (E0382), and the original
+                                // binding is not consumed (functional update semantics)
                                 if arguments.len() != 3 {
                                     return Err(std::fmt::Error);
                                 }
@@ -1005,17 +1154,19 @@ impl RustCodeGenerator {
                                 let idx = self.generate_expression_value(&arguments[1])?;
                                 let val = self.generate_expression_value(&arguments[2])?;
                                 Ok(format!(
-                                    "{{ let mut l = {}; l[{} as usize] = {}; l }}",
+                                    "{{ let mut l = {}.clone(); l[{} as usize] = {}; l }}",
                                     list, idx, val
                                 ))
                             }
                             "First" => {
-                                // First[list] -> list[0]
+                                // First[list] -> list[0].clone()
+                                // Clone so the element can be used by value without
+                                // moving out of a named Vec binding (E0507)
                                 if arguments.len() != 1 {
                                     return Err(std::fmt::Error);
                                 }
                                 let list = self.generate_expression_value(&arguments[0])?;
-                                Ok(format!("{}[0]", list))
+                                Ok(format!("{}[0].clone()", list))
                             }
                             "Rest" => {
                                 // Rest[list] -> list[1..].to_vec()
@@ -1184,6 +1335,12 @@ impl RustCodeGenerator {
             } => {
                 let mut result = String::new();
 
+                // If the Cond's inferred type is unit, append ";" after each arm
+                // so side-effect arms with different Rust types (e.g. WriteFile
+                // returning Result vs Print returning ()) both normalize to unit.
+                let cond_type = self.infer_return_type(expr, &[]);
+                let is_unit = cond_type == "()";
+
                 for (i, (condition, statements)) in conditions.iter().enumerate() {
                     if i > 0 {
                         result.push_str(" else ");
@@ -1195,14 +1352,22 @@ impl RustCodeGenerator {
                         result.push_str("{\n");
                         self.indent_level += 1;
                         let stmt_val = self.generate_expression_value(statements)?;
-                        write!(&mut result, "{}{}\n", self.indent(), stmt_val)?;
+                        if is_unit {
+                            write!(&mut result, "{}{};\n", self.indent(), stmt_val)?;
+                        } else {
+                            write!(&mut result, "{}{}\n", self.indent(), stmt_val)?;
+                        }
                         self.indent_level -= 1;
                         write!(&mut result, "{}}}", self.indent())?;
                     } else {
                         write!(&mut result, "if {} {{\n", cond_val)?;
                         self.indent_level += 1;
                         let stmt_val = self.generate_expression_value(statements)?;
-                        write!(&mut result, "{}{}\n", self.indent(), stmt_val)?;
+                        if is_unit {
+                            write!(&mut result, "{}{};\n", self.indent(), stmt_val)?;
+                        } else {
+                            write!(&mut result, "{}{}\n", self.indent(), stmt_val)?;
+                        }
                         self.indent_level -= 1;
                         write!(&mut result, "{}}}", self.indent())?;
                     }
@@ -1212,7 +1377,11 @@ impl RustCodeGenerator {
                     write!(&mut result, " else {{\n")?;
                     self.indent_level += 1;
                     let default_val = self.generate_expression_value(default_expr)?;
-                    write!(&mut result, "{}{}\n", self.indent(), default_val)?;
+                    if is_unit {
+                        write!(&mut result, "{}{};\n", self.indent(), default_val)?;
+                    } else {
+                        write!(&mut result, "{}{}\n", self.indent(), default_val)?;
+                    }
                     self.indent_level -= 1;
                     write!(&mut result, "{}}}", self.indent())?;
                 }

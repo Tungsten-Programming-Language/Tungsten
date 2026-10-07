@@ -18,3 +18,13 @@ pub fn read_line() -> String {
         .expect("Failed to read line");
     input.trim().to_string()
 }
+
+/// Read the entire contents of a file, returning None if it can't be read
+pub fn read_file(path: &str) -> Option<String> {
+    std::fs::read_to_string(path).ok()
+}
+
+/// Write contents to a file, returning an error message on failure
+pub fn write_file(path: &str, contents: &str) -> Result<(), String> {
+    std::fs::write(path, contents).map_err(|e| e.to_string())
+}

@@ -18,7 +18,7 @@ A functional programming language that transpiles to Rust with Wolfram Language-
 - **Loops**: `Do[body, {i, n}]`, `While[cond, body]`, `Break[]`, `Continue[]`
 - **Higher-order functions**: `Map[f, list]`, `Filter[f, list]`, `Fold[f, init, list]`, `FlatMap[f, list]`, `Take[n, list]`, `Zip[list1, list2]`, `GroupBy[key_fn, list]`
 - **List operations**: `Append[list, item]`, `Length[list]`, `First[list]`, `Rest[list]`, `Reverse[list]`, `Concat[a, b]`, `Nth[list, i]`
-- **Input/Output**: `ReadLine[]`, `Print[msg]`, `Args[]`
+- **Input/Output**: `ReadLine[]`, `Print[msg]`, `Args[]`, `ReadFile[path]`, `WriteFile[path, contents]`
 - **Lazy iterators**: `LazyMap[f, list]`, `LazyFilter[f, list]`, `Collect[iter]`
 - **Logging**: `LogDebug[msg]`, `LogInfo[msg]`, `LogWarn[msg]`, `LogError[msg]`
 
@@ -102,6 +102,26 @@ Lazy iterators avoid intermediate allocations when chaining operations:
 | `ReadLine[]` | `: Option[String]` | Read line from stdin, returns `Some[line]` or `None` on EOF |
 | `Print[msg]` | `: ()` | Print message to stdout |
 | `Args[]` | `: List[String]` | Get command-line arguments |
+| `ReadFile[path]` | `: Option[String]` | Read entire file contents, returns `Some[contents]` or `None` if unreadable |
+| `WriteFile[path, contents]` | `: Result[(), String]` | Write contents to file, returns `Ok[()]` or `Err[message]` |
+
+**File I/O usage:**
+```
+(* Read a file - pattern match on the result *)
+Match[ReadFile["todo.txt"],
+    [Some[content], Print[content]],
+    [None, Print["File not found"]]
+]
+
+(* Write a file - check the result *)
+Match[WriteFile["todo.txt", "buy milk"],
+    [Ok[()], Print["Saved"]],
+    [Err[msg], Print["Error: ", msg]]
+]
+
+(* Or propagate errors with ? inside a Result-returning function *)
+Save[x] := WriteFile["data.txt", x]?
+```
 
 **ReadLine usage:**
 ```

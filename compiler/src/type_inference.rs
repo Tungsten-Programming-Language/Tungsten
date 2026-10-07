@@ -391,6 +391,75 @@ impl TypeInference {
                                 }
                                 Ok(Type::Option(Box::new(Type::String)))
                             }
+                            "ReadFile" => {
+                                // ReadFile[path] returns Option[String]
+                                if arguments.len() != 1 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 1,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::Option(Box::new(Type::String)))
+                            }
+                            "WriteFile" => {
+                                // WriteFile[path, contents] returns Result[(), String]
+                                if arguments.len() != 2 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 2,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::Result(
+                                    Box::new(Type::Tuple(vec![])),
+                                    Box::new(Type::String),
+                                ))
+                            }
+                            "ToString" => {
+                                // ToString[x] returns String
+                                if arguments.len() != 1 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 1,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::String)
+                            }
+                            "StringJoin" => {
+                                // StringJoin[list, sep] returns String
+                                if arguments.len() != 2 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 2,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::String)
+                            }
+                            "StringSplit" => {
+                                // StringSplit[text, sep] returns List[String]
+                                if arguments.len() != 2 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 2,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                Ok(Type::List(Box::new(Type::String)))
+                            }
+                            "If" => {
+                                // If[cond, then] or If[cond, then, else] returns type of branches
+                                if arguments.len() < 2 || arguments.len() > 3 {
+                                    return Err(TypeError::ArityMismatch {
+                                        function: name.clone(),
+                                        expected: 2,
+                                        actual: arguments.len(),
+                                    });
+                                }
+                                self.infer_expression(&arguments[1])
+                            }
                             "Length" => {
                                 // Length[list] returns Int64
                                 if arguments.len() != 1 {
